@@ -45,7 +45,7 @@ Every page is a complete HTML5 document with:
 
 Required meta tags: `version`, `slug`, `path`, `type`, `updated`.
 
-Type-specific tags layer on top (tasks need `status`, `priority`, `due`; people need `relationship`; meetings need `date`, `attendee`). The full reference is in [`knowledgebase.md`](./knowledgebase.md) and (in any setup with a format spec doc) the gist's [`format/frontmatter-reference.md`](../../robin-gist/format/frontmatter-reference.md).
+Type-specific tags layer on top (tasks need `status`, `priority`, `due`; people need `relationship`; meetings need `date`, `attendee`). The full reference is in [`knowledgebase.md`](./knowledgebase.md) and (in any setup with a format spec doc) the gist's [`format/frontmatter-reference.md`](../../format/frontmatter-reference.md).
 
 ## Authoring surface
 

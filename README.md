@@ -2,6 +2,8 @@
 
 **A starter kit for building your own agentic second brain** — a durable, local-first knowledge base that an AI coding agent (Claude Code, Cursor, and friends) can read, write, and reason over, plus a daily working rhythm to keep it healthy.
 
+![The Robin web UI — your daily dashboard over a local, file-based vault. (Synthetic demo data.)](docs/screenshot.png)
+
 Robin is not a product. It's a **pattern**: a set of conventions, a file format, an MCP server, a local web UI, and a library of agent skills you copy into a repo to give your agent a real memory.
 
 ## What's in here

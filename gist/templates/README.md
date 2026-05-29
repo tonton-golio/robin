@@ -6,10 +6,10 @@ Files you copy into your own repo, with placeholders to fill in. The setup guide
 
 - [`CLAUDE.md`](./CLAUDE.md) — the entry-point constitution for your repo root. Every agent session reads this first.
 - [`constitution/`](./constitution/) — 14 files governing the agent's behavior. Copy all of them to `.claude/constitution/` at your repo root.
-- [`brain/`](./brain/) — seed `_index.html` files for every brain subdirectory. Copy to `brain/` at your repo root.
+- [`brain/`](./brain/) — seed `_index.html` files for every brain subdirectory. Copy to `{{VAULT_DIR}}/brain/` (under your vault dir, default `base/`).
 - [`examples/`](./examples/) — example pages showing the canonical shape for each type (project, person, decision, hub, task, pattern). Use as starting templates when authoring.
 - [`hooks/`](./hooks/) — `settings.json` and the two hook scripts (`pre-compact.sh`, `daily-log.sh`). Copy to `.claude/` and `.claude/hooks/`.
-- [`inbox/`](./inbox/), [`logs/`](./logs/), [`out/`](./out/) — README files explaining what goes in each. Drop the README into the matching directory at your repo root, or use as reference and skip.
+- [`inbox/`](./inbox/), [`logs/`](./logs/), [`out/`](./out/) — README files explaining what goes in each. Drop the README into the matching directory under your vault dir (`{{VAULT_DIR}}/inbox/`, `{{VAULT_DIR}}/logs/`, `{{VAULT_DIR}}/out/`), or use as reference and skip.
 
 ## Placeholders to replace
 
@@ -29,12 +29,12 @@ Every file uses one or more of these placeholders. Search each file for `{{` and
 
 1. `CLAUDE.md` → repo root.
 2. `constitution/*.md` → `.claude/constitution/` at repo root.
-3. `brain/**/_index.html` → `brain/` at repo root.
-4. `brain/memory/events.jsonl` (empty) → `brain/memory/events.jsonl` at repo root.
+3. `brain/**/_index.html` → `{{VAULT_DIR}}/brain/`.
+4. `brain/memory/events.jsonl` (empty) → `{{VAULT_DIR}}/brain/memory/events.jsonl`.
 5. `hooks/settings.json` → `.claude/settings.json`.
 6. `hooks/*.sh` → `.claude/hooks/` (and `chmod +x`).
-7. (Optional) `inbox/README.md`, `logs/README.md`, `out/README.md` → the matching directories at your repo root.
-8. `logs/changelog.md`, `logs/ingest-log.md` (the empty starter files) → `logs/` at your repo root.
+7. (Optional) `inbox/README.md`, `logs/README.md`, `out/README.md` → the matching directories under `{{VAULT_DIR}}/`.
+8. `logs/changelog.md`, `logs/ingest-log.md` (the empty starter files) → `{{VAULT_DIR}}/logs/`.
 9. (Optional) `examples/` → keep as reference, or copy a few into `brain/_examples/` for the agent to see.
 
 ## What's NOT here

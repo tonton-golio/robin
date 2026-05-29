@@ -6,7 +6,7 @@
 
 You are about to set up a **second brain** for a user: a structured, file-based knowledge system the user and their agents will share across sessions. The pattern is called **Robin**.
 
-This file is your runbook. It assumes you can read other files in this `robin-gist/` folder.
+This file is your runbook. It assumes you can read other files in this `robin/gist/` folder.
 
 ---
 
@@ -221,7 +221,7 @@ The hooks do two things:
 VAULT="${CLAUDE_PROJECT_DIR:-$(pwd)}/<vault>"
 ```
 
-If you instead put `brain/`, `inbox/`, `logs/`, `out/` directly at the repo root (no separate vault dir), leave the `VAULT=` lines as shipped. Whichever you pick, make the hook path and `ROBIN_VAULT` agree on where the vault is.
+The vault always lives under its own dir (default `base/`), so keep the hook `VAULT=` line pointed at `${CLAUDE_PROJECT_DIR:-$(pwd)}/<vault>`. Make the hook path and `ROBIN_VAULT` agree on where the vault is.
 
 Both hooks are optional. If the user doesn't want them, skip this step — but if you copy `settings.json`, you must copy **both** scripts it references, or remove the unwanted entry from `settings.json`.
 

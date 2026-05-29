@@ -26,7 +26,7 @@ Promotion is what `/learn` does. It is the explicit gateway from session-context
 
 ## Memory placement
 
-Three layers — pick the right one. (See also [`../concepts/05-two-memory-layers.md`](../../robin-gist/concepts/05-two-memory-layers.md).)
+Three layers — pick the right one. (See also [`../concepts/05-two-memory-layers.md`](../../concepts/05-two-memory-layers.md).)
 
 | If it's… | …it goes to |
 |---|---|

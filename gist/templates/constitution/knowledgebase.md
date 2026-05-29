@@ -66,7 +66,7 @@ Every page has a `<head>` with at least these meta tags:
 
 Plus `robin:summary` (almost always), `robin:state` (where lifecycle matters), `robin:tag` (repeated, one per tag), and type-specific tags (e.g., `robin:status` for tasks, `robin:date` for decisions and meetings, `robin:relationship` for people).
 
-See [`format.md`](./format.md) for the full skeleton, and the gist's [`format/frontmatter-reference.md`](../../robin-gist/format/frontmatter-reference.md) for the full meta-tag table.
+See [`format.md`](./format.md) for the full skeleton, and the gist's [`format/frontmatter-reference.md`](../../format/frontmatter-reference.md) for the full meta-tag table.
 
 ## State semantics
 
