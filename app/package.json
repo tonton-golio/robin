@@ -1,0 +1,38 @@
+{
+  "name": "robin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local-first HTML-backed personal brain web app",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:converter": "npm run test --workspace=@robin/converter",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "convert": "node packages/converter/dist/cli.js",
+    "lint": "biome lint . --diagnostic-level=error --skip=a11y --skip=suspicious --skip=security --skip=correctness/useExhaustiveDependencies --skip=correctness/noPrecisionLoss",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "prepare": "lefthook install || echo 'lefthook not installed (run: npm i lefthook -D && npx lefthook install)'",
+    "hooks:install": "npx lefthook install"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@types/node": "^24.0.0",
+    "lefthook": "^1.11.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "next@16.2.6": {
+      "postcss": "8.5.15"
+    }
+  }
+}

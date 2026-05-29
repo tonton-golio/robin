@@ -1,0 +1,6 @@
+SPEAKER_00: Hey everyone, thanks for joining the quick sync today.
+SPEAKER_01: No problem. What's the priority for this week?
+SPEAKER_00: We need to land the image dedup work and get the first OCR benchmark numbers.
+SPEAKER_01: Got it. I can take the dedup piece if you want.
+SPEAKER_00: Perfect. Let's aim to have something reviewable by Thursday.
+SPEAKER_01: Works for me.

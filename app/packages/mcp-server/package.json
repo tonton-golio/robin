@@ -1,0 +1,38 @@
+{
+  "name": "@robin/mcp-server",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Model Context Protocol stdio server for the Robin brain vault.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "robin-mcp": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./types": "./dist/types.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@robin/converter": "*",
+    "@robin/indexer": "*",
+    "@robin/memory": "*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "hast-util-from-html": "^2.0.3",
+    "hast-util-to-html": "^9.0.4",
+    "unist-util-visit": "^5.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  }
+}

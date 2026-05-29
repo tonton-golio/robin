@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Migrate hero copy</title>
+  <link rel="canonical" href="/p/migrate-hero-copy">
+  <meta name="robin:version" content="0.2">
+  <meta name="robin:slug" content="migrate-hero-copy">
+  <meta name="robin:path" content="brain/tasks/migrate-hero-copy.html">
+  <meta name="robin:type" content="task">
+  <meta name="robin:status" content="open">
+  <meta name="robin:priority" content="p2">
+  <meta name="robin:workflow" content="next">
+  <meta name="robin:due" content="2026-06-15">
+  <meta name="robin:owner" content="jamie-doe">
+  <meta name="robin:project" content="site-rebuild">
+  <meta name="robin:source" content="manual">
+  <meta name="robin:created" content="2026-05-28T14:00:00Z">
+  <meta name="robin:updated" content="2026-05-28T14:00:00Z">
+  <meta name="robin:summary" content="Port the hero section copy from the legacy CMS to the new repo.">
+  <meta name="robin:tag" content="site-rebuild">
+</head>
+<body>
+  <article data-robin-doc>
+    <h1>Migrate hero copy</h1>
+
+    <p>Port the hero section copy from the legacy WordPress CMS to the new Next.js repo. Maintain wording; restyle later in the design system review.</p>
+
+    <h2>Acceptance</h2>
+    <ul data-block="bulletList">
+      <li>Hero text renders identically on staging.</li>
+      <li>Light/dark mode both look correct.</li>
+      <li>Lighthouse score unchanged.</li>
+    </ul>
+
+    <h2>Notes</h2>
+    <ul data-block="bulletList">
+      <li>Use the export from <a data-wiki="inbox/docs/cms-export-2026-05.md" href="/p/inbox/docs/cms-export-2026-05">the CMS export</a> as the source.</li>
+      <li>Watch for embedded shortcodes — they need to convert to React components.</li>
+    </ul>
+  </article>
+</body>
+</html>

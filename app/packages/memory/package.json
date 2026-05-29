@@ -1,0 +1,25 @@
+{
+  "name": "@robin/memory",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Append-only local memory engine for Robin.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  }
+}

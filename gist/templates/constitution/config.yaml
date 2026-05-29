@@ -1,0 +1,44 @@
+# Runtime configuration for the agent and its skills.
+#
+# Flags are soft switches. Skills are designed to ignore unknown flags, so
+# adding new ones is safe. Default behavior is conservative: turn things on
+# only when {{USER_NAME}} wants them on.
+#
+# Format: <key>: <value>      # comment
+
+# --- Identity ---
+agent_name: "{{AGENT_NAME}}"
+user_name: "{{USER_NAME}}"
+timezone: "{{TIMEZONE}}"           # e.g., "Europe/Copenhagen", "America/New_York"
+
+# --- Domain capabilities ---
+hiring: false                      # Active hiring pipeline (surfacing candidates in briefings).
+budget: false                      # Budget tracking surfacing in /morning-brief.
+board_reporting: false             # Board prep + recurring reporting cadence.
+
+# --- Reflection / review cadence ---
+self_reflection: false             # /remsleep Phase 4 writes reflection questions; /morning-brief surfaces them.
+self_reflection_cadence_days: 14   # How often /morning-brief nudges self-reflection.
+weekly_review: false               # Monday rollup of the prior week.
+stakeholder_pulse: false           # Flag stakeholders not pinged in N+ days.
+stakeholder_pulse_threshold_days: 21
+
+# --- Morning brief ritual blocks ---
+ai_news: false                     # Daily AI-news scan (requires an external news source).
+daily_curiosity: false             # Surface a curious topic to explore.
+project_pulse: false               # Project-by-project status review at start of day.
+habit_checkin: false               # Personal habit tracking.
+
+# --- Communication ---
+slack_user_id: ""                  # Your Slack user ID (if Slack MCP is enabled).
+team_standup_channel: ""           # Slack channel ID for /eod-signoff.
+primary_channels: []               # Comma- or list-separated Slack channel IDs for /check-slack.
+team_members: []                   # Names of team members (used by check-slack, weekly-review).
+team_repos: []                     # Repo slugs to surface in /weekly-review.
+
+# --- Email ---
+email: "{{USER_EMAIL}}"
+noise_senders: []                  # Senders to silently skip in /check-email (newsletters, bots, automation).
+
+# Add custom flags below as new rituals or behaviors emerge. Skills not
+# referencing a flag will silently ignore it.

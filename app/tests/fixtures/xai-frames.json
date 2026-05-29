@@ -1,0 +1,32 @@
+{
+  "_comment": "Scripted xAI Realtime WebSocket frames for Playwright interview tests (Phase 7). Format mirrors the xAI Realtime API event stream. This placeholder will be populated in Phase 7 once the WS relay route is wired.",
+  "frames": [
+    {
+      "type": "session.created",
+      "session": {
+        "id": "test-session-001",
+        "model": "grok-2-vision-1212",
+        "modalities": ["text", "audio"]
+      }
+    },
+    {
+      "type": "response.audio_transcript.delta",
+      "delta": "Hello, I am the Robin interview assistant. "
+    },
+    {
+      "type": "response.audio_transcript.delta",
+      "delta": "What would you like to discuss today?"
+    },
+    {
+      "type": "response.audio_transcript.done",
+      "transcript": "Hello, I am the Robin interview assistant. What would you like to discuss today?"
+    },
+    {
+      "type": "response.done",
+      "response": {
+        "id": "test-response-001",
+        "status": "completed"
+      }
+    }
+  ]
+}

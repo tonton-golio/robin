@@ -1,0 +1,241 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   robin-deck.css — canonical slide kit for Robin presentations  ·  BASE LAYER
+   ----------------------------------------------------------------------------
+   Premium board-deck house style: McKinsey structural rigor + Apple polish.
+   Design tokens, the slide frame, typography, footer/source furniture, the
+   takeaway bar, navigation and print rules live here. Reusable EXHIBIT
+   components (cards, charts, tables, pipeline, exec grid, screenshots) live in
+   the companion file robin-deck-components.css — load both:
+
+     <link rel="stylesheet" href="/robin-deck.css" />
+     <link rel="stylesheet" href="/robin-deck-components.css" />
+
+   Standard structure:
+     <div class="deck">
+       <section class="slide cover">…</section>   first slide; .cover = title layout
+       <section class="slide">…</section>
+       …
+     </div>
+
+   Per-slide grammar (consulting "horizon" layout):
+     .titlebar > .eyebrow + h2.tight   action-title band with hairline rule
+     …one exhibit / content block…
+     .source                           attribution line, bottom-left
+     .takeaway                         the synthesized "so what" bar (optional)
+     .footer + .pagenum                fixed slide footer (page # via robin-deck.js)
+
+   Theming: override the custom properties on :root in the deck's own <style>.
+   Defaults below are the house style. Design spec: deep-navy structural color,
+   one bright signal-blue accent, Apple near-black ink, hairlines + whitespace
+   do the structuring (not heavy fills), semantic green/amber/red for data only.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Surfaces & ink (Apple near-black, never pure #000) ── */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f7f7f9;      /* card / exhibit panel */
+  --surface-3: #f0f1f4;      /* nested / inset */
+  --ink: #1a1a1c;            /* primary text, action titles */
+  --ink-2: #3c3c43;          /* secondary text */
+  --mute: #6e6e78;           /* captions, eyebrows, source */
+  --mute-2: #9a9aa4;         /* least-important / muted bars */
+
+  /* ── Hairlines (1px, low contrast) ── */
+  --rule: #e7e7ec;           /* default hairline, gridlines */
+  --rule-strong: #d4d4db;    /* title-band underline, table dividers */
+
+  /* ── Accents: navy = structure, signal = the one highlight ── */
+  --accent: #0b2a4a;         /* deep navy — structural */
+  --accent-2: #1c4e80;       /* mid navy — secondary series */
+  --signal: #0a84ff;         /* bright blue — single highlight per exhibit */
+  --accent-soft: #eef3f9;    /* navy-tinted surface */
+  --signal-soft: #eaf3ff;    /* callout / highlighted-row surface */
+
+  /* ── Semantics: DATA ONLY, never decoration ── */
+  --good: #1e8e5a;  --good-soft: #e7f4ed;
+  --warn: #b7791f;  --warn-soft: #f8efdd;
+  --bad:  #c0392b;  --bad-soft:  #fbece9;
+
+  /* ── Draft placeholder ── */
+  --placeholder: #cc2a2a;
+  --placeholder-bg: #fff2f2;
+  --code-bg: #0d1b2a;
+  --code-ink: #e8edf2;
+
+  /* ── Geometry ── */
+  --deck-w: 1200px;
+  --deck-h: 675px;
+  --radius-s: 8px;
+  --radius: 12px;
+  --radius-l: 16px;
+
+  /* ── Layered, cool-tinted elevation (never neutral black) ── */
+  --elev-1: 0 1px 2px rgba(16,24,40,.04), 0 4px 12px rgba(16,24,40,.06);
+  --elev-2: 0 2px 4px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.08), 0 0 0 1px rgba(16,24,40,.03);
+  --elev-3: 0 4px 8px rgba(11,42,74,.06), 0 18px 44px rgba(11,42,74,.13), 0 0 0 1px rgba(16,24,40,.04);
+
+  /* ── Type ── */
+  --sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: "SF Pro Display", -apple-system, "Inter", "Segoe UI", sans-serif; /* legacy alias → sans */
+  --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: #15161a;          /* dark stage behind the slides */
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv01";
+  font-variant-numeric: tabular-nums;
+}
+body { padding: 26px 0; }
+
+.deck { width: var(--deck-w); margin: 0 auto; }
+
+.slide {
+  display: none;
+  width: var(--deck-w);
+  height: var(--deck-h);
+  background: var(--surface);
+  padding: 44px 60px 54px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--elev-3);
+  border-radius: 6px;
+}
+.slide.active { display: block; }
+
+/* Cover: vertically-centred title layout */
+.cover-body { display: flex; flex-direction: column; justify-content: center; height: 100%; padding-bottom: 56px; }
+
+/* ── Typography (1.2 minor-third scale, negative tracking grows with size) ── */
+h1 { font-size: 56px; line-height: 1.04; font-weight: 700; margin: 0 0 8px; letter-spacing: -1.4px; color: var(--ink); }
+h2 { font-size: 38px; line-height: 1.1;  font-weight: 600; margin: 0 0 6px; letter-spacing: -0.7px; color: var(--ink); }
+h3 { font-size: 19px; line-height: 1.25; font-weight: 600; margin: 0 0 10px; letter-spacing: -0.2px; color: var(--ink); }
+h4 { font-size: 14px; line-height: 1.3;  font-weight: 600; margin: 0 0 4px; letter-spacing: -0.1px; }
+.subtitle { font-size: 19px; color: var(--mute); margin: 0 0 22px; font-weight: 400; letter-spacing: -0.2px; }
+.lead { font-size: 21px; line-height: 1.4; letter-spacing: -0.2px; color: var(--ink-2); }
+.eyebrow {
+  font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--accent);
+  font-weight: 700; margin-bottom: 9px;
+}
+p  { font-size: 16px; line-height: 1.44; margin: 7px 0; letter-spacing: -0.1px; color: var(--ink-2); max-width: 62ch; }
+ul { padding-left: 19px; margin: 6px 0; }
+li { font-size: 15px; line-height: 1.46; margin: 5px 0; letter-spacing: -0.1px; color: var(--ink-2); }
+li::marker { color: var(--mute-2); }
+strong { color: var(--ink); font-weight: 600; }
+small, .small { font-size: 12.5px; color: var(--mute); line-height: 1.4; letter-spacing: 0; }
+
+/* ── Action-title band (the consulting "horizon") ── */
+.titlebar { border-bottom: 1px solid var(--rule-strong); padding-bottom: 14px; margin-bottom: 20px; }
+.titlebar h2 { margin: 0; }
+.titlebar .subtitle { margin: 7px 0 0; font-size: 16px; }
+h2.tight { font-size: 27px; line-height: 1.18; letter-spacing: -0.5px; font-weight: 600; }
+
+/* ── Source / attribution line, above the footer ── */
+.source { position: absolute; left: 60px; right: 60px; bottom: 42px; font-size: 10.5px;
+  color: var(--mute); letter-spacing: 0; line-height: 1.35; }
+
+/* ── Footer + page number ── */
+.footer {
+  position: absolute; left: 60px; right: 60px; bottom: 18px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: var(--mute);
+  border-top: 1px solid var(--rule); padding-top: 9px;
+}
+.pagenum { font-variant-numeric: tabular-nums; letter-spacing: 0.3px; }
+
+/* ── Synthesized takeaway bar — the "so what", stronger than .callout ── */
+.takeaway {
+  margin-top: 16px; padding: 13px 20px; border-radius: var(--radius-s);
+  background: var(--accent); color: #fff; font-size: 14px; line-height: 1.45;
+  letter-spacing: -0.1px; box-shadow: var(--elev-1);
+}
+.takeaway strong { color: #fff; }
+.takeaway .hl { color: #7fc0ff; font-weight: 700; }
+
+/* ── Columns ── */
+.two-col     { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 4px; }
+.two-col-3-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 36px; margin-top: 4px; }
+.two-col > *, .two-col-3-2 > *, .cards-2x3 > *, .stat-grid > *, .pipeline > * { min-width: 0; }
+
+/* ── Standalone navigation (hidden inside the Robin viewer) ── */
+.nav {
+  position: fixed; top: 14px; right: 18px; z-index: 100;
+  background: rgba(20,22,26,.72); color: #fff; padding: 7px 14px; border-radius: 22px;
+  font-family: var(--sans); font-size: 12px; user-select: none; backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0,0,0,.3);
+}
+.nav button { background: transparent; border: 0; color: #fff; cursor: pointer; padding: 0 7px; font-size: 14px; }
+.nav #counter { font-variant-numeric: tabular-nums; opacity: .9; }
+
+/* When embedded in the Robin artifact viewer, the chrome supplies the mat. */
+html[data-robin-embed] body { padding: 0 !important; background: transparent !important; }
+html[data-robin-embed] .deck { width: var(--deck-w); margin: 0 !important; }
+html[data-robin-embed] .slide { box-shadow: none !important; border-radius: 0 !important; }
+html[data-robin-embed] .nav { display: none !important; }
+
+/* ── Draft placeholder ── */
+.ph {
+  display: inline-block; border: 1.5px dashed var(--placeholder); background: var(--placeholder-bg);
+  color: var(--placeholder); padding: 1px 6px; border-radius: 3px; font-style: italic;
+  font-size: 0.9em;
+}
+.ph::before { content: "TBD: "; font-weight: 700; font-size: 0.85em; letter-spacing: 0.5px; }
+.ph.bare::before { content: ""; }
+tr.ph-row td { background: var(--placeholder-bg); }
+tr.ph-row td:first-child { border-left: 3px solid var(--placeholder); }
+
+/* ── Print / PDF export ──
+   One slide per printed page, landscape. The Robin artifact viewer prints the
+   deck via iframe.contentWindow.print(); these rules must win even when the
+   iframe carries html[data-robin-embed] (which otherwise dims/zeros the mat
+   and hides inactive slides). Hence the !important overrides below. */
+@page {
+  size: 1200px 675px;   /* matches --deck-w / --deck-h → 16:9, no scaling */
+  margin: 0;
+}
+@media print {
+  html, body,
+  html[data-robin-embed] body {
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .nav { display: none !important; }
+  .deck,
+  html[data-robin-embed] .deck {
+    width: var(--deck-w) !important;
+    margin: 0 !important;
+  }
+  /* Every slide prints — including the inactive ones the viewer hides — and
+     each starts a fresh page. Both the legacy and modern break properties are
+     set so Chrome/Safari/Firefox all paginate. */
+  .slide,
+  html[data-robin-embed] .slide {
+    display: block !important;
+    width: var(--deck-w) !important;
+    height: var(--deck-h) !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .slide:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  /* Preserve the designed colors/exhibits in the PDF. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

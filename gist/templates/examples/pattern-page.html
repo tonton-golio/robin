@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Parallel sub-agent sweep</title>
+  <link rel="canonical" href="/p/parallel-subagent-sweep">
+  <meta name="robin:version" content="0.2">
+  <meta name="robin:slug" content="parallel-subagent-sweep">
+  <meta name="robin:path" content="brain/patterns/parallel-subagent-sweep.html">
+  <meta name="robin:type" content="pattern">
+  <meta name="robin:state" content="stable">
+  <meta name="robin:scope" content="global">
+  <meta name="robin:created" content="2026-04-12T10:00:00Z">
+  <meta name="robin:updated" content="2026-05-28T15:00:00Z">
+  <meta name="robin:summary" content="Dispatch one sub-agent per directory with strict bounds; great for vault audits.">
+  <meta name="robin:tag" content="agents">
+  <meta name="robin:tag" content="maintenance">
+</head>
+<body>
+  <article data-robin-doc>
+    <h1>Parallel sub-agent sweep</h1>
+
+    <p>For repetitive audits across a directory tree, dispatch one sub-agent per directory (or per directory bundle). Each sub-agent works in parallel with a clear, narrow scope.</p>
+
+    <h2>When this applies</h2>
+    <ul data-block="bulletList">
+      <li>Auditing a large brain or codebase where each subdirectory has independent content.</li>
+      <li>Tasks where work is largely mechanical but volume is high (e.g., link audits, frontmatter conformance).</li>
+      <li>Tasks where the main-context agent benefits from staying lightweight.</li>
+    </ul>
+
+    <h2>How it works</h2>
+    <ol>
+      <li>Identify the directories to cover. Bundle small ones together.</li>
+      <li>Dispatch one sub-agent per bundle. Give each strict bounds:
+        <ul data-block="bulletList">
+          <li>Stay within the assigned directory.</li>
+          <li>Mechanical fixes only (no semantic restructures).</li>
+          <li>No deletes; no commits.</li>
+          <li>Flag semantic decisions to the orchestrator.</li>
+        </ul>
+      </li>
+      <li>Collect results in the main context. Triage flagged items.</li>
+    </ol>
+
+    <h2>Why it works</h2>
+    <ul data-block="bulletList">
+      <li>Parallelism keeps wall-clock time low.</li>
+      <li>Strict bounds prevent runaway sub-agents from making unsafe edits.</li>
+      <li>Main context stays free for triage.</li>
+    </ul>
+
+    <h2>Watch for</h2>
+    <ul data-block="bulletList">
+      <li>Sub-agents going outside their scope. Verify bounds in the dispatch prompt.</li>
+      <li>Over-reporting. Encourage terse output ("X fixed, Y flagged"), not full diffs in the response.</li>
+    </ul>
+  </article>
+</body>
+</html>

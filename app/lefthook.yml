@@ -1,0 +1,41 @@
+# lefthook.yml
+# Modern, fast, declarative pre-commit hooks for the robin monorepo.
+# Install once with: npx lefthook install
+#
+# We deliberately keep this lightweight. The goal is to catch obvious
+# formatting/lint issues and protect the converter's golden tests.
+
+pre-commit:
+  parallel: true
+  commands:
+    # Biome format + lint on all relevant staged files.
+    # --write mutates the files in place; stage_fixed: true re-stages them.
+    biome:
+      glob: "*.{js,ts,cjs,mjs,jsx,tsx,json,jsonc,css,scss,md,mdx}"
+      run: npx @biomejs/biome check --write {staged_files}
+      stage_fixed: true
+
+    # Protect the canonical format contract.
+    # Any change under the converter package or its golden tests must pass the round-trip suite.
+    converter-golden:
+      glob: "packages/converter/**/*.{ts,tsx,js,html,md}"
+      run: npm run test:converter -- --run
+      skip:
+        - merge
+        - rebase
+
+    # Optional future hook: run a broader lint or typecheck on staged TS changes.
+    # Uncomment when we tighten the lint script in Phase 3.
+    # typecheck-staged:
+    #   glob: "*.{ts,tsx}"
+    #   run: npx tsc --noEmit -p tsconfig.base.json
+    #   skip:
+    #     - merge
+    #     - rebase
+
+# You can add other groups later (pre-push, prepare-commit-msg, etc.).
+# Example:
+# pre-push:
+#   commands:
+#     full-test:
+#       run: npm test

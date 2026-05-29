@@ -1,0 +1,50 @@
+{
+  "name": "@robin/web",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Read-only Next.js web app for the Robin brain.",
+  "scripts": {
+    "dev": "next dev -p 8400",
+    "build": "next build",
+    "start": "next start -p 8400",
+    "test": "vitest run lib/routes.test.ts lib/annotations.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@blocknote/core": "^0.51.3",
+    "@blocknote/mantine": "^0.51.3",
+    "@blocknote/react": "^0.51.3",
+    "@robin/converter": "*",
+    "@robin/memory": "*",
+    "@tailwindcss/postcss": "^4.3.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "dom-anchor-text-position": "^5.0.0",
+    "dom-anchor-text-quote": "^4.0.2",
+    "hast-util-from-html": "^2.0.3",
+    "lucide-react": "^1.16.0",
+    "marked": "^18.0.4",
+    "motion": "^12.40.0",
+    "next": "^16.2.6",
+    "radix-ui": "^1.4.3",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-force-graph-2d": "^1.29.1",
+    "swr": "^2.4.1",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.0",
+    "unist-util-visit": "^5.0.0",
+    "whisper-node": "^1.1.1",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "@robin/indexer": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.9.3"
+  }
+}

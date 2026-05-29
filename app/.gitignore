@@ -1,0 +1,31 @@
+# Robin monorepo root .gitignore
+# This file must use recursive patterns (**) so nested workspaces
+# (apps/* and packages/*) never leak node_modules, build artifacts, etc.
+
+# Dependencies (all levels)
+**/node_modules
+
+# Build / generated outputs (all levels)
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+
+# Logs & local env
+**/*.log
+.env
+.env.local
+.env.*.local
+
+# OS / editor noise
+.DS_Store
+*.swp
+*~
+
+# Testing & coverage
+coverage/
+test-results/
+playwright-report/
+
+# Robin-specific sidecar / cache (never committed)
+.hermes/

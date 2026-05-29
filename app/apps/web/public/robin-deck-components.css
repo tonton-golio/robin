@@ -1,0 +1,173 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   robin-deck-components.css — reusable EXHIBIT components for Robin decks
+   ----------------------------------------------------------------------------
+   Companion to robin-deck.css (base layer: tokens, frame, typography). Load
+   both. Every component here reads the design tokens from :root, so re-skinning
+   a deck only means overriding the tokens — never the components.
+
+   Components: cards, stat tiles, data tables, status pills, the 5-phase
+   pipeline, the executive-summary grid, horizontal bar charts, mini precision
+   bars, column charts, milestone timelines, screenshot frames, legends,
+   callouts, and the monospace figure block.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── Cards — white surface, hairline, soft elevation (not heavy fills) ── */
+.card {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: 15px 18px; box-shadow: var(--elev-1); position: relative;
+}
+.card h3 { color: var(--accent); font-size: 15px; margin-bottom: 5px; }
+.card p { font-size: 13px; margin: 4px 0 0; line-height: 1.42; color: var(--ink-2); }
+.card.dark { background: var(--accent); border-color: transparent; color: #e9eef4; box-shadow: var(--elev-2); }
+.card.dark h3 { color: #fff; }
+.card.dark p { color: #c4d2e0; }
+.cards-2x3 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── Stat / KPI tiles ── */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 12px; }
+.stat { padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--rule); border-radius: var(--radius-s); }
+.stat .label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--mute); font-weight: 600; }
+.stat .value { font-size: 27px; font-weight: 700; color: var(--ink); margin-top: 3px; letter-spacing: -0.8px; font-variant-numeric: tabular-nums; }
+.stat .value.good { color: var(--good); }
+.stat .value.warn { color: var(--warn); }
+.stat .value.bad  { color: var(--bad); }
+.stat .sub { font-size: 11px; color: var(--mute); margin-top: 2px; }
+
+/* ── Tables ── */
+table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
+th { text-align: left; padding: 6px 8px; border-bottom: 1.5px solid var(--ink); font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.6px; color: var(--mute); }
+td { padding: 5.5px 8px; border-bottom: 1px solid var(--rule); word-wrap: break-word; color: var(--ink-2); }
+td strong, td b { color: var(--ink); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.total td { font-weight: 700; border-top: 1.5px solid var(--ink); border-bottom: none; background: var(--accent-soft); color: var(--ink); }
+tr.depart td { color: var(--mute); text-decoration: line-through; }
+tr.depart td:last-child { text-decoration: none; color: var(--bad); font-style: italic; }
+
+/* ── Status pills (soft semantic surfaces) ── */
+.pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.3px; white-space: nowrap; text-transform: uppercase; }
+.pill.prod     { background: var(--good-soft); color: var(--good); }
+.pill.inflight { background: var(--warn-soft); color: var(--warn); }
+.pill.stub     { background: var(--surface-3); color: var(--mute); }
+.pill.risk     { background: var(--bad-soft);  color: var(--bad); }
+.pill.crit     { background: var(--bad); color: #fff; }
+.pill.target   { background: var(--accent-soft); color: var(--accent); }
+
+/* ── Pipeline (5 phases) — surface tiles, colored accent edge + heading ── */
+.pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 16px 0; }
+.phase { background: var(--surface-2); border: 1px solid var(--rule); border-top: 3px solid var(--accent);
+  border-radius: var(--radius-s); padding: 12px 13px; min-height: 168px; box-shadow: var(--elev-1); }
+.phase h4 { margin: 0 0 3px; font-size: 13px; color: var(--ink); }
+.phase .count { font-size: 10px; color: var(--mute); font-weight: 600; margin-bottom: 7px; letter-spacing: 0.3px; }
+.phase ul { padding-left: 15px; margin: 5px 0 0; }
+.phase li { font-size: 10.5px; line-height: 1.4; margin: 3px 0; color: var(--ink-2); }
+.phase.intake      { border-top-color: var(--warn); }      .phase.intake h4      { color: var(--warn); }
+.phase.research    { border-top-color: var(--accent-2); }  .phase.research h4    { color: var(--accent-2); }
+.phase.eligibility { border-top-color: #6b4e9e; }           .phase.eligibility h4 { color: #6b4e9e; }
+.phase.cleanup     { border-top-color: var(--good); }       .phase.cleanup h4     { color: var(--good); }
+.phase.finalize    { border-top-color: var(--bad); }        .phase.finalize h4    { color: var(--bad); }
+
+/* ── Executive-summary grid ── */
+.exec { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+.exec__item { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start;
+  padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius);
+  box-shadow: var(--elev-1); }
+.exec__kpi { font-size: 28px; font-weight: 700; color: var(--accent); line-height: 1; white-space: nowrap;
+  letter-spacing: -0.8px; font-variant-numeric: tabular-nums; }
+.exec__kpi.good { color: var(--good); }
+.exec__h { font-weight: 600; font-size: 14px; margin: 0 0 4px; color: var(--ink); letter-spacing: -0.1px; }
+.exec__p { font-size: 12.5px; color: var(--mute); margin: 0; line-height: 1.45; }
+.exec__p strong { color: var(--ink-2); }
+
+/* ── Horizontal bar chart (cost comparisons, scenarios) ── */
+.hbars { margin: 14px 0 6px; }
+.hbar { display: grid; grid-template-columns: 152px 1fr 78px; align-items: center; gap: 14px; margin: 11px 0; }
+.hbar__label { font-size: 12.5px; color: var(--ink); line-height: 1.2; }
+.hbar__label small { color: var(--mute); display: block; font-size: 10.5px; margin-top: 1px; }
+.hbar__track { position: relative; height: 16px; background: var(--surface-3); border-radius: 3px; }
+.hbar__fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 3px; background: var(--mute-2); min-width: 3px; }
+.hbar__fill.good { background: var(--good); }
+.hbar__fill.warn { background: var(--warn); }
+.hbar__fill.bad  { background: var(--bad); }
+.hbar__fill.ink  { background: var(--accent); }
+.hbar__fill.signal { background: var(--signal); }
+.hbar__val { font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; font-weight: 700; color: var(--ink); }
+.hbar__val.good { color: var(--good); }
+.hbar__val small { font-weight: 400; color: var(--mute); }
+
+/* ── Mini precision bar with target tick (scorecard cells) ── */
+.minibar { position: relative; height: 10px; width: 112px; background: var(--surface-3);
+  border-radius: 2px; display: inline-block; vertical-align: middle; }
+.minibar > i { position: absolute; left: 0; top: 0; height: 100%; border-radius: 2px; display: block; background: var(--accent); }
+.minibar > i.good { background: var(--good); }
+.minibar > i.warn { background: var(--warn); }
+.minibar > i.bad  { background: var(--bad); }
+.minibar > b { position: absolute; top: -3px; width: 0; height: 16px; border-left: 2px dashed var(--ink); }
+
+/* ── Column chart (budget / token ramp) ── */
+.colchart { display: flex; align-items: flex-end; gap: 8px; height: 150px;
+  border-bottom: 1.5px solid var(--rule-strong); padding-top: 6px; }
+.col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.col__bar { width: 64%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.col__bar.peak { background: var(--signal); }
+.col__bar.soft { background: var(--mute-2); }
+.col__val { font-size: 9px; color: var(--ink-2); margin-bottom: 3px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.col__cap { font-size: 9.5px; color: var(--mute); margin-top: 4px; }
+
+/* ── Milestone timeline ── */
+.timeline { position: relative; margin: 26px 0 8px; }
+.timeline__line { position: absolute; left: 4%; right: 4%; top: 7px; height: 2px; background: var(--rule); }
+.timeline__row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; position: relative; }
+.tl { text-align: center; }
+.tl__dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); margin: 0 auto 10px;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 4px var(--accent); }
+.tl__dot.done { background: var(--good); box-shadow: 0 0 0 3px #fff, 0 0 0 4px var(--good); }
+.tl__dot.future { background: #fff; box-shadow: 0 0 0 3px #fff, 0 0 0 4px var(--mute-2); }
+.tl__when { font-size: 11.5px; font-weight: 700; color: var(--ink); }
+.tl__what { font-size: 10.5px; color: var(--mute); line-height: 1.35; margin-top: 3px; }
+
+/* ── Screenshot frame (browser chrome) ── */
+.shot { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden;
+  box-shadow: var(--elev-2); background: #fff; }
+.shot__bar { display: flex; align-items: center; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--rule); }
+.shot__bar i { width: 9px; height: 9px; border-radius: 50%; background: #cfcfd6; display: block; margin-right: 6px; }
+.shot__bar span { font-size: 10px; color: var(--mute); margin-left: 8px; letter-spacing: 0.2px; }
+.shot__img { display: block; width: 100%; height: auto; }
+.shot__cap { font-size: 11px; color: var(--mute); padding: 8px 12px; line-height: 1.4; }
+.shot--ph { display: flex; align-items: center; justify-content: center; min-height: 240px;
+  background: repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 10px,var(--surface-3) 10px,var(--surface-3) 20px);
+  font-size: 12px; color: var(--accent); text-align: center; }
+
+/* ── Inline chart legend ── */
+.legend-inline { display: flex; gap: 18px; font-size: 11px; color: var(--mute); margin: 2px 0 8px; align-items: center; flex-wrap: wrap; }
+.legend-inline span { display: inline-flex; align-items: center; gap: 6px; }
+.legend-inline i { width: 13px; height: 11px; border-radius: 2px; display: inline-block; }
+.sw-golden { background: var(--good); }
+.sw-editor { background: var(--accent); }
+.sw-ink    { background: var(--ink); }
+.sw-target { width: 2px !important; height: 15px !important; border-left: 2px dashed var(--ink); border-radius: 0; }
+
+/* ── Callout ── */
+.callout {
+  padding: 13px 18px; margin: 12px 0; border-radius: var(--radius-s);
+  background: var(--signal-soft); border-left: 3px solid var(--signal);
+  font-size: 15px; color: var(--ink-2); line-height: 1.45;
+}
+.callout strong { color: var(--ink); }
+
+/* ── Monospace figure / code block ── */
+.costbox {
+  background: var(--code-bg); color: var(--code-ink);
+  border-radius: var(--radius-s); padding: 14px 18px; font-family: var(--mono); font-size: 12.5px;
+  line-height: 1.7; white-space: pre; overflow-x: auto; box-shadow: var(--elev-1);
+}
+.costbox .accent { color: #7fc0ff; }
+.costbox .num { color: #6fd3a8; }
+
+/* ── Inline progress bar (legacy) ── */
+.bar-cell { width: 160px; padding: 4px 8px; }
+.bar { height: 8px; background: var(--rule); border-radius: 4px; overflow: hidden; }
+.bar > span { display: block; height: 100%; border-radius: 4px; }
+.bar > span.p { background: var(--good); }
+.bar > span.r { background: var(--warn); }

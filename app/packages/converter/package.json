@@ -1,0 +1,46 @@
+{
+  "name": "@robin/converter",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Markdown import to canonical HTML converter for the Robin brain. See ROBIN_FORMAT.md.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "robin-convert": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./types": "./dist/types.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@types/hast": "^3.0.4",
+    "@types/mdast": "^4.0.4",
+    "gray-matter": "^4.0.3",
+    "hast-util-from-html": "^2.0.3",
+    "hast-util-to-html": "^9.0.4",
+    "js-yaml": "^4.1.0",
+    "mdast-util-from-markdown": "^2.0.2",
+    "mdast-util-gfm": "^3.0.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "prettier": "^3.4.1",
+    "remark-gfm": "^4.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.1",
+    "rehype-stringify": "^10.0.1",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  }
+}

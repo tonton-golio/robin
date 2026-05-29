@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Memory</title>
+  <link rel="canonical" href="/p/memory/_index">
+  <meta name="robin:version" content="0.2">
+  <meta name="robin:slug" content="memory/_index">
+  <meta name="robin:path" content="brain/memory/_index.html">
+  <meta name="robin:type" content="index">
+  <meta name="robin:state" content="stable">
+  <meta name="robin:updated" content="2026-01-01T00:00:00Z">
+  <meta name="robin:summary" content="Compact recall layer. See events.jsonl.">
+</head>
+<body>
+  <article data-robin-doc>
+    <h1>Memory</h1>
+    <p>This is the compact recall layer. The data lives in <code>events.jsonl</code> — one JSON object per line, append-only.</p>
+    <p>Memory events are small recall cues (preferences, corrections, source-of-truth notes, dated facts) that the agent consults early in retrieval. They are <strong>not</strong> a replacement for canonical pages. If something deserves a paragraph, write a page.</p>
+
+    <h2>Schema</h2>
+    <p>Three event kinds:</p>
+    <ul data-block="bulletList">
+      <li><code>memory.saved</code> — a new memory is captured. Carries a full memory record.</li>
+      <li><code>memory.seen</code> — the memory was matched/read.</li>
+      <li><code>memory.resolved</code> — lifecycle change (active → superseded / rejected / archived).</li>
+    </ul>
+
+    <h2>Tiers</h2>
+    <ul data-block="bulletList">
+      <li><strong>working</strong> — current session observations.</li>
+      <li><strong>episodic</strong> — session summaries ("on date X we decided Y").</li>
+      <li><strong>semantic</strong> — facts, preferences, decisions ("we use EUR").</li>
+      <li><strong>procedural</strong> — workflows, rules, calibrations ("when deploying X, do Y").</li>
+    </ul>
+
+    <p>See the durable format spec (<code>format/memory-events.md</code> in the starter kit) for the full schema.</p>
+  </article>
+</body>
+</html>

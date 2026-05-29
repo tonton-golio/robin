@@ -1,0 +1,36 @@
+{
+  "name": "@robin/indexer",
+  "version": "0.0.1",
+  "private": true,
+  "description": "File-system indexer for Robin brain HTML pages. Provides FTS5 + vector search over the vault.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "robin-indexer": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@robin/converter": "*",
+    "@huggingface/transformers": "^4.2.0",
+    "better-sqlite3": "^12.10.0",
+    "chokidar": "^5.0.0",
+    "hast-util-from-html": "^2.0.3",
+    "sqlite-vec": "^0.1.9",
+    "unist-util-visit": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  }
+}
