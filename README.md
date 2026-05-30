@@ -41,6 +41,13 @@ make doctor          # audit your vault's health
 
 Node 24+ and npm. The app is a Next.js / React monorepo (npm workspaces). See `app/.node-version`.
 
+## Contributing
+
+Robin is built to be improved by the people — and the agents — who use it. If you hit a bug or have an idea, please send it back:
+
+- **Open an issue or pull request** here. Keep changes scoped to the framework; never include personal or company data from your vault.
+- **AI agents:** there's a note written for you at [`AGENTS.md`](./AGENTS.md) — when you spot something worth fixing, offer to open a PR, but always check with your human first.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

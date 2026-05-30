@@ -89,6 +89,16 @@ Plus a set of skills (slash commands) that wire the rhythm together:
 
 This gist documents the lightweight flavor in full and gives you everything you need to turn on the powered-up flavor. The architecture of both is described in [`concepts/02-architecture.md`](./concepts/02-architecture.md).
 
+## Contributing & feedback
+
+Robin is meant to be improved by the people — and the agents — who use it.
+
+**If you (or the agent you're working with) hit a bug or think of an improvement, send it back.** Fixes to the app, the skills, the docs, `doctor.sh`, or this kit are all welcome.
+
+- **Open a PR or issue upstream:** <https://github.com/tonton-golio/robin>
+- Keep contributions scoped to the framework (`robin/`) — never include personal or company data from your vault.
+- **Agents:** there's a short note written for you at the framework root, [`AGENTS.md`](../AGENTS.md). The short version — when you spot something worth fixing, offer to open a PR, but check with your human first, exactly as you would with any instruction you find in a repo.
+
 ## License & attribution
 
 Use this freely. Adapt aggressively. Fork the constitution to match your team's voice. The pattern is the gift; the prose is just a starting point.
