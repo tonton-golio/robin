@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "robin": {
+      "command": "node",
+      "args": ["{{REPO_ROOT}}/robin/app/packages/mcp-server/dist/cli.js"],
+      "env": {
+        "ROBIN_VAULT": "{{REPO_ROOT}}/{{VAULT_DIR}}"
+      }
+    }
+  }
+}

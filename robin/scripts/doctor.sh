@@ -216,8 +216,13 @@ check_generated_ignored() {
 
 # MCP config points at a real vault containing brain/. Prefers node to parse
 # .mcp.json; falls back to a grep parser when node is unavailable.
+# A missing .mcp.json is the lightweight (file-only) flavor — a valid state, not
+# a wiring error — so skip cleanly. When .mcp.json exists, validate it strictly.
 check_mcp() {
-  [[ -f .mcp.json ]] || { echo ".mcp.json missing"; return 1; }
+  if [[ ! -f .mcp.json ]]; then
+    echo "no .mcp.json — lightweight flavor; see robin/gist/app-setup.md to add the app + MCP" >&2
+    return 0
+  fi
   local cli vault
   if command -v node >/dev/null 2>&1; then
     cli="$(node -e 'try{const c=require("./.mcp.json");process.stdout.write(c.mcpServers.robin.args[0])}catch{}' 2>/dev/null || true)"

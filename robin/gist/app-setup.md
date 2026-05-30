@@ -93,9 +93,11 @@ From the repo root:
 make robin-ui
 ```
 
-That target runs the Next.js dev server on **`localhost:8400`** with `ROBIN_VAULT` set. The shipped `Makefile` hardcodes the kit author's vault path — **edit the `robin-ui` target so `ROBIN_VAULT` points at your `<vault>`**, or run it directly:
+That target runs the Next.js dev server on **`localhost:8400`**. The shipped `Makefile` defaults `ROBIN_VAULT` to `./base` (the kit convention), so if your vault is `base/` it just works. If you chose a different `<vault>`, override it per-invocation or set it in `.env.local`:
 
 ```bash
+make robin-ui ROBIN_VAULT=/abs/path/to/your/<vault>
+# …or run the dev server directly:
 cd robin/app/apps/web && ROBIN_VAULT=/abs/path/to/your/<vault> npm run dev
 ```
 
@@ -107,7 +109,7 @@ Open `http://localhost:8400` and you should see your brain rendered from the can
 
 ## Step 4 — Wire the MCP server (`.mcp.json`)
 
-Create `.mcp.json` at the **repo root** so Claude Code loads the Robin MCP server. Point `args[0]` at the built CLI and put `ROBIN_VAULT` in `env`:
+Create `.mcp.json` at the **repo root** so Claude Code loads the Robin MCP server. The kit ships this as a template at [`templates/mcp.json`](./templates/mcp.json) — copy it and replace `{{REPO_ROOT}}` and `{{VAULT_DIR}}`. Point `args[0]` at the built CLI and put `ROBIN_VAULT` in `env`:
 
 ```json
 {
@@ -145,9 +147,9 @@ make doctor          # or: ./robin/scripts/doctor.sh
 - Brain pages carry required `robin:*` meta tags; `brain/` has no Markdown; `out/` is HTML-only.
 - The append-only logs exist (`logs/changelog.md`, `logs/ingest-log.md`, `logs/repo-log.md` — seed all three; see [`setup.md`](./setup.md) Step 4).
 
-> **`doctor.sh` is two tools in one: a wiring check *and* a content linter.** On a **fresh, seeded** vault it should pass clean — that confirms your *setup* is correct. On an **established, real** vault it may also report **content findings** that are not wiring failures: `out/` files that aren't HTML-only, archived tasks that still carry an active `robin:state`, or stale-path grep hits. Those mean "doctor found pre-existing content to clean up," not "your install is broken." When triaging a failure, separate the two: a missing `.mcp.json`, an unresolvable CLI path, or a `ROBIN_VAULT` without a `brain/` is a **wiring** problem you must fix to proceed; a content lint hit is a **maintenance** task you can address later (often via `/lint-wiki` or `/remsleep`).
+> **`doctor.sh` is two tools in one: a wiring check *and* a content linter.** On a **fresh, seeded** vault it should pass clean — that confirms your *setup* is correct. On an **established, real** vault it may also report **content findings** that are not wiring failures: `out/` files that aren't HTML-only, archived tasks that still carry an active `robin:state`, or stale-path grep hits. Those mean "doctor found pre-existing content to clean up," not "your install is broken." When triaging a failure, separate the two: a broken `.mcp.json` (an unresolvable CLI path, or a `ROBIN_VAULT` without a `brain/`) is a **wiring** problem you must fix to proceed; a content lint hit is a **maintenance** task you can address later (often via `/lint-wiki` or `/remsleep`). On the lightweight (file-only) flavor there is no `.mcp.json`, and doctor **skips** the MCP check cleanly — that's expected, not a failure.
 
-> The shipped `doctor.sh` hardcodes `base/` as the vault path in several checks (it was extracted from a `base/` setup). If you chose a different `ROBIN_VAULT` name, update the `base/...` path literals in `robin/scripts/doctor.sh` to match — or adopt `base/` to use it unchanged.
+> `doctor.sh` auto-resolves your vault from `ROBIN_VAULT` (or the `ROBIN_VAULT` set in `.mcp.json`, else the `base/` default) and expresses every in-vault path relative to it — so a vault dir with a custom name needs **no edits** to the script. Just make sure `ROBIN_VAULT` (or `.mcp.json`) names your vault dir and that it contains a `brain/`.
 
 ---
 

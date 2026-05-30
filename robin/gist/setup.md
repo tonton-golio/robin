@@ -12,18 +12,26 @@ This file is your runbook. It assumes you can read other files in this `robin/gi
 
 ## What you are building
 
-A new git repository (or a sub-folder of an existing repo) with **two halves**:
+**The recommended starting point is a fork of the Robin starter repo** (<https://github.com/tonton-golio/robin>) — or "Use this template". A fresh fork already contains:
+
+- the **framework** at `robin/` (`robin/app`, `robin/gist`, `robin/scripts`), and
+- the **repo-root glue**: `Makefile` (so `make robin-ui` / `make doctor` work from the repo root), `.gitignore`, `README.md`, `LICENSE`.
+
+Your job in this guide is to add the parts that are personal and can't ship pre-filled — **two halves** plus the MCP wiring:
 
 - **The control plane**, at the repo root:
   1. A `CLAUDE.md` that tells future agent sessions what the system is and where the rules live.
   2. A `.claude/constitution/` folder containing the agent's operating rules, split by concern.
   3. A `.claude/skills/` folder with slash commands the user invokes daily.
   4. A `.claude/hooks/` folder + `.claude/settings.json` for session lifecycle scripts.
+  5. *(Only if the user wants the app/MCP)* a `.mcp.json`, scaffolded from [`templates/mcp.json`](./templates/mcp.json) — see Step 11.
 - **The vault**, in a directory pointed to by the `ROBIN_VAULT` env var (this kit defaults to `base/`):
-  5. A `brain/` folder containing the durable knowledge base.
-  6. `inbox/`, `logs/`, `out/` folders for the capture → process → durable → artifact pipeline.
+  6. A `brain/` folder containing the durable knowledge base.
+  7. `inbox/`, `logs/`, `out/` folders for the capture → process → durable → artifact pipeline.
 
 Most of this lives in *files*. No database, no server required for the lightweight flavor — the agent uses normal file I/O. If the user also wants the browser UI and indexed search, those ship in the framework at `robin/app`; wiring them is covered in the optional [`app-setup.md`](./app-setup.md) (and Step 11 below).
+
+> If the user only copied this `gist/` folder rather than forking the whole repo, they won't have the repo-root `Makefile`/`.gitignore`. The lightweight (file-only) flavor needs neither — and Step 10 has a `.gitignore` example. The app flavor needs the full framework (`robin/app`, `robin/scripts`, the `Makefile`), so **forking the repo is the simpler path** to the app and the `make` targets.
 
 Throughout this guide, **`<vault>`** means the directory you chose for `ROBIN_VAULT` (default `base/`). Substitute it everywhere you see it.
 
@@ -34,9 +42,9 @@ Throughout this guide, **`<vault>`** means the directory you chose for `ROBIN_VA
 Before writing anything, confirm:
 
 1. **Where should the repo live, and what is the vault directory called?**
-   - Recommend a new git repository the user just created.
-   - Inside it, the **vault** (all personal data) lives in a directory named by the `ROBIN_VAULT` env var. Default to `base/` to mirror this kit; let the user pick another name if they prefer. Record the choice as `<vault>` — you will substitute it everywhere.
-   - The framework (the app, this gist, scripts) lives under `robin/`. If the user copied the framework along with the gist, it is already there; if they only have the gist, note that the app lives at `robin/app` relative to repo root.
+   - Recommend a **fork of the Robin starter repo** (or "Use this template"). A fork already has the framework at `robin/` and the root glue (`Makefile`, `.gitignore`, `README`, `LICENSE`) in place. If the user only has this `gist/` folder, they'll create that glue during setup.
+   - Inside the repo, the **vault** (all personal data) lives in a directory named by the `ROBIN_VAULT` env var. Default to `base/` to mirror this kit; let the user pick another name if they prefer. Record the choice as `<vault>` — you will substitute it everywhere.
+   - The framework lives under `robin/` (`robin/app`, `robin/gist`, `robin/scripts`).
 
 2. **What name does the user want for their agent?** The default is `Robin`. Other examples: `Iris`, `Atlas`, `Echo`. Use whatever the user picks. If they don't care, use `Robin`.
 
@@ -265,7 +273,9 @@ If any of those fail, read the relevant `SKILL.md` and the constitution file the
 
 ## Step 10 — Set up `.gitignore`
 
-Before the first commit, make sure runtime state and secrets stay out of git. At minimum, ignore (paths shown for a `base/` vault):
+**If the user forked the starter repo, a root `.gitignore` already ships** — it keeps secrets and runtime state out of git while keeping `<vault>/brain/**` tracked. Verify it, and if the user chose a vault dir name other than `base/`, update the `base/...` paths in it to match. Then skip to Step 11.
+
+If the user only has the gist (no fork), create the `.gitignore` yourself. At minimum, ignore (paths shown for a `base/` vault):
 
 ```gitignore
 # Runtime sidecar — rebuildable index + rendered cache
@@ -300,7 +310,7 @@ The lightweight, file-only flavor works now. If the user wants the **browser UI 
 1. `cp robin/app/apps/web/.env.example robin/app/apps/web/.env.local` and set **`ROBIN_VAULT`** to the absolute path of `<vault>`.
 2. `cd robin/app && npm install`, then build the packages you need (e.g. `npm run build --workspace=@robin/mcp-server --workspace=@robin/indexer --workspace=@robin/converter`). Avoid the root `npm run build` until env is set — it also runs `apps/web`'s `next build`. See [`app-setup.md`](./app-setup.md) Step 2.
 3. `make robin-ui` (or `cd robin/app/apps/web && ROBIN_VAULT=… npm run dev`) — serves on **`localhost:8400`**.
-4. Add `.mcp.json` at the repo root pointing the `robin` MCP server at `robin/app/packages/mcp-server/dist/cli.js` with `ROBIN_VAULT` in `env`.
+4. Add `.mcp.json` at the repo root — copy [`templates/mcp.json`](./templates/mcp.json) and replace `{{REPO_ROOT}}` (absolute path to the repo) and `{{VAULT_DIR}}` (your `<vault>` name). It points the `robin` MCP server at `robin/app/packages/mcp-server/dist/cli.js` with `ROBIN_VAULT` in `env`. Reconnect with `/mcp` after creating it.
 5. Run `robin/scripts/doctor.sh` (or `make doctor`) to verify wiring.
 
 Skills that call `mcp__robin__*` tools (e.g. `/check-tasks`, `/create-task`) need this MCP wired. Without it, fall back to direct file reads.
