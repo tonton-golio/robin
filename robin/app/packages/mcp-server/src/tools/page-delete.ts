@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod/v4';
 import { resolveRef } from '../resolve.js';
@@ -37,7 +38,16 @@ export async function pageDelete(
   await fs.mkdir(archiveDir, { recursive: true });
 
   const filename = path.basename(resolved.absolutePath);
-  const archivedAbs = path.join(archiveDir, filename);
+  // Disambiguate against an already-archived file of the same basename:
+  // fs.rename silently overwrites, so a recreate-then-re-archive sequence would
+  // destroy the earlier archived snapshot. Append a counter (foo.html →
+  // foo.1.html) until the target is free, keeping the safety net non-destructive.
+  const parsedName = path.parse(filename);
+  let archivedAbs = path.join(archiveDir, filename);
+  let n = 1;
+  while (fsSync.existsSync(archivedAbs)) {
+    archivedAbs = path.join(archiveDir, `${parsedName.name}.${n++}${parsedName.ext}`);
+  }
   await fs.rename(resolved.absolutePath, archivedAbs);
 
   const archivedRel = path.relative(ctx.vaultPath, archivedAbs);

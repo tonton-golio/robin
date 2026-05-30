@@ -132,9 +132,13 @@ export function isValidDate(value: string): boolean {
 export function isBeforeDay(value: string, now: Date): boolean {
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) return false;
+  // Compare on the UTC calendar day, matching how due dates are written
+  // (robin:due is always YYYY-MM-DDT00:00:00Z). Using local setHours would
+  // reinterpret that UTC-midnight instant as the PREVIOUS local day in any
+  // negative-offset timezone, flagging a task due *today* as overdue a day early.
   const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  parsed.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
+  parsed.setUTCHours(0, 0, 0, 0);
   return parsed < today;
 }
 

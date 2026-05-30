@@ -35,34 +35,38 @@ export async function linkList(
 
   try {
     if (direction === 'in' || direction === 'both') {
+      // Backlinks: from_path identifies the EXACT source page (from_slug is
+      // non-unique, so resolving it via wikilinks would mis-attribute every
+      // same-slug hub page).
       const stmt = db.prepare(
-        `SELECT l.from_slug, l.kind, w.path
+        `SELECT l.from_slug, l.from_path, l.kind
          FROM links l
-         LEFT JOIN wikilinks w ON w.slug = l.from_slug
          WHERE l.to_slug = ?`
       );
       const rows = stmt.all(resolved.slug) as Array<{
         from_slug: string;
+        from_path: string;
         kind: string;
-        path: string | null;
       }>;
       for (const row of rows) {
         links.push({
           slug: row.from_slug,
-          path: row.path ?? '',
+          path: row.from_path ?? '',
           kind: row.kind,
         });
       }
     }
 
     if (direction === 'out' || direction === 'both') {
+      // Forward links: query by the source page's from_path (unique) so a hub
+      // page's out-links aren't merged with a same-slug sibling's.
       const stmt = db.prepare(
         `SELECT l.to_slug, l.kind, w.path
          FROM links l
          LEFT JOIN wikilinks w ON w.slug = l.to_slug
-         WHERE l.from_slug = ?`
+         WHERE l.from_path = ?`
       );
-      const rows = stmt.all(resolved.slug) as Array<{
+      const rows = stmt.all(resolved.vaultRelativePath) as Array<{
         to_slug: string;
         kind: string;
         path: string | null;

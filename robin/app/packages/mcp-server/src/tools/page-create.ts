@@ -50,8 +50,24 @@ export async function pageCreate(
   // knowledge dirs so creation can't land in control-plane/runtime dirs
   // (.claude, .robin, tools). Mirrors the web allowlist in
   // apps/web/lib/vault-file.ts (normalizeVaultFilePath ALLOWED_ROOTS).
+  //
+  // Normalize FIRST, then extract the root — otherwise a folder like
+  // 'brain/../.claude' yields folderRoot='brain' (allowed) while the file lands
+  // in .claude/. The path.resolve containment check above doesn't catch this
+  // because .claude is still inside the vault root. Mirrors page-move.ts
+  // safeDestination, which normalizes and rejects '../' before the root check.
   const ALLOWED_ROOTS = new Set(['brain', 'inbox', 'out', 'logs']);
-  const folderRoot = vaultRelativePath.split('/')[0];
+  const normalized = path.posix
+    .normalize(vaultRelativePath.replaceAll(path.sep, '/'))
+    .replace(/^\.\//, '');
+  if (path.posix.isAbsolute(normalized) || normalized === '..' || normalized.startsWith('../')) {
+    throw mcpError(
+      -32602,
+      `Folder must be under brain/, inbox/, out/, or logs/: ${vaultRelativePath}`,
+      undefined
+    );
+  }
+  const folderRoot = normalized.split('/')[0];
   if (!folderRoot || !ALLOWED_ROOTS.has(folderRoot)) {
     throw mcpError(
       -32602,

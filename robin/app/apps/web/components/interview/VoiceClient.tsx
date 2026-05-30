@@ -39,6 +39,15 @@ export function useVoiceClient(): VoiceClientState {
   const clientRef = useRef<VoiceClient | null>(null);
 
   const start = useCallback(async (wsUrl: string | WsUrlProvider) => {
+    // Tear down any prior client before starting a new one. start() is wired to
+    // onClick with no synchronous re-entrancy guard (the disabled gate only
+    // updates at render time), so a fast double-invoke or HMR could otherwise
+    // overwrite clientRef and orphan the previous client's mic / WebSocket /
+    // AudioContext / reconnect timer. Null the ref BEFORE awaiting stop() so a
+    // concurrent start sees null and won't double-stop the same object.
+    const prev = clientRef.current;
+    clientRef.current = null;
+    if (prev) await prev.stop();
     setError(null);
     setErrorKind(null);
     setDetail(null);

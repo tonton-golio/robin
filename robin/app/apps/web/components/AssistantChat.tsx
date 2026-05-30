@@ -40,12 +40,20 @@ export function AssistantChat() {
   const [isRecording, setIsRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Aborts the in-flight turn (Stop button / unmount); the backend kills the
+  // spawned CLI when the request signal fires.
+  const abortRef = useRef<AbortController | null>(null);
+  // Stable per-tab conversation id so concurrent tabs don't share a Claude
+  // session on the server. Generated client-side on first use in handleSend.
+  const convIdRef = useRef<string>('');
 
   // Stop the mic + recorder if the user navigates away mid-recording (/chat
   // unmounts on navigation). Stop tracks directly rather than via .stop(),
-  // whose async onstop handler would setState after unmount.
+  // whose async onstop handler would setState after unmount. Also abort any
+  // in-flight assistant turn so the backend tears down the spawned CLI.
   useEffect(() => {
     return () => {
+      abortRef.current?.abort();
       const recorder = recorderRef.current;
       if (recorder) {
         recorder.ondataavailable = null;
@@ -69,6 +77,14 @@ export function AssistantChat() {
     const text = input.trim();
     if (!text || isStreaming) return;
 
+    // A reset rotates the conversation id so the server starts a brand-new
+    // session for this tab; otherwise reuse the stable per-tab id.
+    if (resetNext || !convIdRef.current) convIdRef.current = crypto.randomUUID();
+    const conversationId = convIdRef.current;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setInput('');
     setError(null);
     setSaveState({ kind: 'idle' });
@@ -85,7 +101,8 @@ export function AssistantChat() {
       const response = await fetch('/api/assistant/message', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text, reset: resetNext }),
+        body: JSON.stringify({ text, reset: resetNext, conversationId }),
+        signal: controller.signal,
       });
 
       setResetNext(false);
@@ -134,14 +151,26 @@ export function AssistantChat() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      setStatus('Error');
-      setTurns((current) => appendText(current, `\n\n${message}`));
+      // User-initiated stop / navigation: not an error, just end quietly.
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setStatus('Stopped');
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+        setStatus('Error');
+        setTurns((current) => appendText(current, `\n\n${message}`));
+      }
     } finally {
+      abortRef.current = null;
       setIsStreaming(false);
     }
   }, [input, isStreaming, resetNext]);
+
+  // Stop the in-flight turn from the UI; aborts the fetch, which signals the
+  // backend to kill the spawned CLI.
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const handleSave = useCallback(async () => {
     setSaveState({ kind: 'saving' });
@@ -310,9 +339,15 @@ export function AssistantChat() {
             rows={2}
             className="min-h-11 flex-1 resize-none rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
-          <Button onClick={handleSend} disabled={!canSend} className="w-24">
-            Send
-          </Button>
+          {isStreaming ? (
+            <Button variant="destructive" onClick={handleStop} className="w-24">
+              Stop
+            </Button>
+          ) : (
+            <Button onClick={handleSend} disabled={!canSend} className="w-24">
+              Send
+            </Button>
+          )}
         </div>
       </div>
     </div>

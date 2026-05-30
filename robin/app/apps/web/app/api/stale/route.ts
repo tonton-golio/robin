@@ -25,22 +25,27 @@ interface StaleRow {
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10), 200);
+  // Defensive parse mirroring the sibling search/memory routes: a malformed
+  // `?limit=abc` makes parseInt → NaN, and binding NaN to `LIMIT ?` makes
+  // better-sqlite3 throw 'datatype mismatch', which the catch then swallows into
+  // an empty list (the stale view silently shows ZERO pages). Fall back to 50.
+  const rawLimit = Number(searchParams.get('limit'));
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 200) : 50;
 
+  let db: import('better-sqlite3').Database | undefined;
   try {
     // Dynamically load indexer to avoid breaking if not available
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { openDb } = require('@robin/indexer') as { openDb: (p: string) => import('better-sqlite3').Database };
     const vault = locateVault();
     const dbPath = path.join(vault, '.robin', 'index.db');
-    const db = openDb(dbPath);
+    db = openDb(dbPath);
 
     // Ensure staleness column exists (may not on older DBs)
     const cols = db.prepare('PRAGMA table_info(pages)').all() as { name: string }[];
     const hasStale = cols.some((c) => c.name === 'staleness');
 
     if (!hasStale) {
-      db.close();
       return NextResponse.json([]);
     }
 
@@ -57,11 +62,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       )
       .all(limit) as StaleRow[];
 
-    db.close();
     return NextResponse.json(rows);
   } catch (err) {
     // Indexer not available or DB doesn't exist yet
     console.warn('[stale] indexer unavailable:', String(err));
     return NextResponse.json([]);
+  } finally {
+    // Always close — a query-time throw must not leak the better-sqlite3 handle.
+    db?.close();
   }
 }

@@ -9,8 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { RobinBlock, RobinMeta } from '@robin/converter';
-import { canonicalizeHtml } from '@robin/converter';
+import type { RobinBlock } from '@robin/converter';
+import { canonicalizeHtml, normalizeFrontmatter } from '@robin/converter';
 import { writePage, notifyIndexerWrite } from '@/lib/write-page';
 import { normalizeVaultFilePath } from '@/lib/vault-file';
 import path from 'path';
@@ -52,9 +52,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return await writeThroughMcp(mcpUrl, { ...body, path: safePath });
   }
 
-  // Build meta from frontmatter + path
+  // Single source of truth: derive RobinMeta via the converter's
+  // normalizeFrontmatter (correct version '0.2', status/state synonym handling,
+  // size/date/tag/source coercion) instead of hand-building v0.1 meta here.
+  // Keeps this legacy/MCP-facing route's output in lockstep with the server
+  // action in lib/actions/page.ts and the indexer/reader expectations.
   const slug = path.basename(safePath, '.html');
-  const meta = buildMeta(slug, safePath, frontmatter);
+  const title = typeof frontmatter['title'] === 'string' ? (frontmatter['title'] as string) : slug;
+  const { meta } = normalizeFrontmatter({ frontmatter, slug, outputPath: safePath, title });
 
   // Generate canonical HTML
   const html = canonicalizeHtml({ meta, frontmatter, blocks });
@@ -84,62 +89,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function buildMeta(
-  slug: string,
-  filePath: string,
-  frontmatter: Record<string, unknown>
-): RobinMeta {
-  const fm = frontmatter as Record<string, unknown>;
-
-  const tags: string[] = [];
-  const rawTags = fm['tags'];
-  if (Array.isArray(rawTags)) {
-    for (const t of rawTags) if (typeof t === 'string') tags.push(t);
-  } else if (typeof rawTags === 'string' && rawTags.trim()) {
-    tags.push(...rawTags.split(',').map((t) => t.trim()).filter(Boolean));
-  }
-
-  const attendees: string[] = [];
-  const rawAttendees = fm['attendees'];
-  if (Array.isArray(rawAttendees)) {
-    for (const a of rawAttendees) if (typeof a === 'string') attendees.push(a);
-  }
-
-  const sources: string[] = [];
-  const rawSources = fm['source'] ?? fm['sources'];
-  if (Array.isArray(rawSources)) {
-    for (const s of rawSources) if (typeof s === 'string') sources.push(s);
-  } else if (typeof rawSources === 'string' && rawSources.trim()) {
-    sources.push(rawSources);
-  }
-
-  return {
-    version: '0.1',
-    slug,
-    path: filePath,
-    type: String(fm['type'] ?? 'note'),
-    updated: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-    created: typeof fm['created'] === 'string' ? fm['created'] : undefined,
-    summary: typeof fm['summary'] === 'string' ? fm['summary'] : undefined,
-    state: typeof fm['state'] === 'string' ? fm['state'] : undefined,
-    owner: typeof fm['owner'] === 'string' ? fm['owner'] : undefined,
-    priority: typeof fm['priority'] === 'string' ? fm['priority'] : undefined,
-    due: typeof fm['due'] === 'string' ? fm['due'] : undefined,
-    role: typeof fm['role'] === 'string' ? fm['role'] : undefined,
-    relationship: typeof fm['relationship'] === 'string'
-      ? (fm['relationship'] as RobinMeta['relationship'])
-      : undefined,
-    started: typeof fm['started'] === 'string' ? fm['started'] : undefined,
-    date: typeof fm['date'] === 'string' ? fm['date'] : undefined,
-    duration: typeof fm['duration'] === 'string' ? fm['duration'] : undefined,
-    tier: typeof fm['tier'] === 'string' ? fm['tier'] : undefined,
-    tags,
-    attendees,
-    sources,
-    unknownKeys: [],
-  };
-}
 
 async function writeThroughMcp(mcpUrl: string, body: SaveBody): Promise<NextResponse> {
   try {

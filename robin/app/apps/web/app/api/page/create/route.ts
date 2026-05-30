@@ -10,7 +10,7 @@ import type { RobinBlock } from '@robin/converter';
 import fs from 'fs/promises';
 import { vaultPath } from '@/lib/vault';
 import { normalizeVaultFilePath } from '@/lib/vault-file';
-import { canonicalizeHtml } from '@robin/converter';
+import { canonicalizeHtml, normalizeFrontmatter } from '@robin/converter';
 import { writePage, notifyIndexerWrite } from '@/lib/write-page';
 
 interface CreateBody {
@@ -60,41 +60,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // File doesn't exist — good to proceed
   }
 
-  const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const now = new Date();
+  const nowIso = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
 
   const enrichedFm: Record<string, unknown> = {
     type,
-    created: now,
+    created: nowIso,
     ...frontmatter,
   };
 
-  const meta = {
-    version: '0.1' as const,
+  // Single source of truth: derive RobinMeta via the converter's
+  // normalizeFrontmatter (correct version '0.2', status/state synonym handling,
+  // size/date/tag/source coercion) instead of hand-building v0.1 meta here.
+  // Keeps this legacy/MCP-facing route's output in lockstep with the server
+  // action in lib/actions/page.ts and the indexer/reader expectations.
+  const title = typeof enrichedFm['title'] === 'string' ? (enrichedFm['title'] as string) : slug;
+  const { meta } = normalizeFrontmatter({
+    frontmatter: enrichedFm,
     slug,
-    path: safePath,
-    type: type || 'note',
+    outputPath: safePath,
+    title,
     updated: now,
-    created: now,
-    summary: typeof frontmatter['summary'] === 'string' ? frontmatter['summary'] : undefined,
-    state: typeof frontmatter['state'] === 'string' ? frontmatter['state'] : undefined,
-    owner: typeof frontmatter['owner'] === 'string' ? frontmatter['owner'] : undefined,
-    priority: typeof frontmatter['priority'] === 'string' ? frontmatter['priority'] : undefined,
-    due: typeof frontmatter['due'] === 'string' ? frontmatter['due'] : undefined,
-    role: typeof frontmatter['role'] === 'string' ? frontmatter['role'] : undefined,
-    relationship: typeof frontmatter['relationship'] === 'string'
-      ? (frontmatter['relationship'] as import('@robin/converter').RobinMeta['relationship'])
-      : undefined,
-    started: undefined,
-    date: undefined,
-    duration: undefined,
-    tier: undefined,
-    tags: Array.isArray(frontmatter['tags'])
-      ? (frontmatter['tags'] as string[]).filter((t): t is string => typeof t === 'string')
-      : [],
-    attendees: [],
-    sources: [],
-    unknownKeys: [],
-  };
+  });
 
   const defaultBlocks: RobinBlock[] = blocks.length > 0
     ? blocks

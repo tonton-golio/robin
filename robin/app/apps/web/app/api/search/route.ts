@@ -8,7 +8,10 @@ import { search } from '@/lib/indexer-client';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q') ?? '';
-  const k = Math.min(parseInt(searchParams.get('k') ?? '20', 10), 100);
+  // Parse k defensively: a malformed/empty k (NaN) must fall back to the default,
+  // never bypass the 100-cap and dump the whole index. Mirrors /api/knowledge.
+  const rawK = Number(searchParams.get('k'));
+  const k = Number.isFinite(rawK) && rawK > 0 ? Math.min(Math.floor(rawK), 100) : 20;
 
   if (!q.trim()) {
     return NextResponse.json({ hits: [], mode: 'fallback', query: q });

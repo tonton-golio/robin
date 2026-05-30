@@ -58,10 +58,19 @@ function formatDue(due: string | undefined): { label: string; tone: 'overdue' | 
   if (!due) return { label: '', tone: null };
   const date = new Date(due);
   if (Number.isNaN(date.getTime())) return { label: due, tone: null };
-  const now = Date.now();
-  const diff = date.getTime() - now;
+  // Diff whole calendar days, not raw ms: a task "due today" must read as 0 days
+  // regardless of the viewer's timezone. A bare date string ("2026-05-30") parses
+  // as UTC midnight, so anchor the due day to the calendar date the author meant —
+  // its UTC components for date-only input, otherwise its local components — and
+  // compare against the viewer's local today, both floored to a midnight boundary.
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(due.trim());
+  const dueDay = dateOnly
+    ? Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+    : Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   const day = 86400000;
-  const days = Math.round(diff / day);
+  const days = Math.round((dueDay - today) / day);
   let tone: 'overdue' | 'soon' | 'later' = 'later';
   if (days < 0) tone = 'overdue';
   else if (days <= 7) tone = 'soon';

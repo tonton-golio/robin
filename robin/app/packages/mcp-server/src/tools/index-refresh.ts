@@ -27,6 +27,7 @@ export interface IndexRefreshOutput {
   errors: number;
   wikilinks: number;
   ambiguous: number;
+  pruned: number;
   duration_ms: number;
 }
 
@@ -43,6 +44,7 @@ export async function indexRefresh(
       errors: 0,
       wikilinks: 0,
       ambiguous: 0,
+      pruned: 0,
       duration_ms: Date.now() - started,
     };
   }
@@ -54,6 +56,7 @@ export async function indexRefresh(
     errors: r.errors,
     wikilinks: r.wikilinks,
     ambiguous: r.ambiguous,
+    pruned: r.pruned ?? 0,
     duration_ms: Date.now() - started,
   };
 }

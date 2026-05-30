@@ -3,16 +3,20 @@
  *
  * The disk format is HTML (see ROBIN_FORMAT.md). Internally we represent the
  * document body as `RobinBlock[]`, a small intermediate representation that:
- *   - is source-of-truth on disk (embedded as JSON in <script id="robin:blocks">)
- *   - is editor-independent (BlockNote ↔ RobinBlock translation layer in Phase 5)
+ *   - is an in-memory step when converting markdown → canonical HTML (NOT persisted
+ *     on disk in v0.2 — body HTML is the source of truth)
+ *   - is editor-independent (a rich-text editor ↔ RobinBlock translation layer could
+ *     be added later without changing the file format)
  *   - is round-trip stable (sorted keys, no transient ids, deterministic shape)
  */
 
 export type RobinInline =
   | { kind: 'text'; text: string; marks?: RobinMark[] }
   | { kind: 'link'; href: string; content: RobinInline[] }
-  | { kind: 'wikilink'; slug: string; alias?: string }
-  | { kind: 'code'; text: string }
+  // `marks` lets emphasis survive when it wraps a wikilink or inline code
+  // (e.g. `**[[page]]**`, `` **`code`** ``) instead of being silently dropped.
+  | { kind: 'wikilink'; slug: string; alias?: string; marks?: RobinMark[] }
+  | { kind: 'code'; text: string; marks?: RobinMark[] }
   | { kind: 'lineBreak' };
 
 export type RobinMark = 'bold' | 'italic' | 'strike';
@@ -40,7 +44,13 @@ export type RobinBlock =
   | { kind: 'html'; raw: string };
 
 export interface RobinTaskItem {
-  checked: boolean;
+  /**
+   * Checkbox state: `true`/`false` for a real task item, or `null` for a plain
+   * (non-checkbox) item that shares a list with task items. A mixed list
+   * (`- [ ] task` + `- plain`) is rendered as a single taskList so the checkbox
+   * state of the task items is preserved rather than dropped.
+   */
+  checked: boolean | null;
   content: RobinInline[];
   children?: RobinBlock[];
 }

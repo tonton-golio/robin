@@ -143,7 +143,12 @@ export function Annotator({ pathname }: { pathname: string }) {
   const [editor, setEditor] = useState<{ anchor: Anchor; rect: DOMRect } | null>(null);
   const [comment, setComment] = useState('');
   const [annotations, setAnnotations] = useState<AnnotationRecord[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
+  // Toast carries a kind so failed saves render the error (rust) border
+  // instead of looking identical to a success confirmation.
+  const [toast, setToast] = useState<{ message: string; kind: 'success' | 'error' } | null>(null);
+  // In-flight guard: a double-click would otherwise POST twice and create
+  // two distinct annotation events for the same selection.
+  const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!pagePath) return;
@@ -213,11 +218,22 @@ export function Annotator({ pathname }: { pathname: string }) {
         return;
       }
       const rect = range.getBoundingClientRect();
-      if (rect.width < 1) return;
+      // Clear any visible toolbar when the selection shrinks below threshold
+      // mid-drag, otherwise it floats with a stale (now-invalid) anchor.
+      if (rect.width < 1) {
+        setSelection(null);
+        return;
+      }
       const exact = sel.toString();
-      if (exact.length < 2) return;
+      if (exact.length < 2) {
+        setSelection(null);
+        return;
+      }
       const offsets = computeOffsets(root, range);
-      if (!offsets) return;
+      if (!offsets) {
+        setSelection(null);
+        return;
+      }
       const fullText = root.textContent ?? '';
       const prefix = fullText.slice(Math.max(0, offsets.start - 32), offsets.start);
       const suffix = fullText.slice(offsets.end, offsets.end + 32);
@@ -240,6 +256,10 @@ export function Annotator({ pathname }: { pathname: string }) {
 
   async function save(kind: 'highlight' | 'comment', commentMd: string, anchor: Anchor) {
     if (!pagePath || !anchor) return;
+    // Guard against double-submit (double-click / impatient click on a slow fs)
+    // which would append two distinct annotation events for one selection.
+    if (saving) return;
+    setSaving(true);
     const body = {
       page_path: pagePath,
       render_path: pagePath,
@@ -258,12 +278,14 @@ export function Annotator({ pathname }: { pathname: string }) {
       setEditor(null);
       setComment('');
       window.getSelection()?.removeAllRanges();
-      setToast(kind === 'highlight' ? 'Highlighted' : 'Comment saved');
+      setToast({ message: kind === 'highlight' ? 'Highlighted' : 'Comment saved', kind: 'success' });
       setTimeout(() => setToast(null), 1800);
       refresh();
     } catch (err) {
-      setToast(`Save failed: ${(err as Error).message}`);
+      setToast({ message: `Save failed: ${(err as Error).message}`, kind: 'error' });
       setTimeout(() => setToast(null), 2400);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -273,6 +295,8 @@ export function Annotator({ pathname }: { pathname: string }) {
     <>
       {selection && !editor && (
         <div
+          role="toolbar"
+          aria-label="Annotate selection"
           className="absolute z-50 flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-lg"
           onMouseDown={(event) => event.preventDefault()}
           style={{
@@ -287,6 +311,7 @@ export function Annotator({ pathname }: { pathname: string }) {
             type="button"
             variant="ghost"
             size="sm"
+            disabled={saving}
             onClick={() => save('highlight', '', selection.anchor)}
             title="Highlight selection"
           >
@@ -297,6 +322,7 @@ export function Annotator({ pathname }: { pathname: string }) {
             type="button"
             variant="ghost"
             size="sm"
+            disabled={saving}
             onClick={() => setEditor({ anchor: selection.anchor, rect: selection.rect })}
             title="Add comment"
           >
@@ -307,18 +333,34 @@ export function Annotator({ pathname }: { pathname: string }) {
 
       {editor && (
         <div
+          role="dialog"
+          aria-label="Add a comment"
           className="fixed z-[60] w-80 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
           style={{
+            // position: fixed resolves against the viewport, and editor.rect is
+            // already viewport-relative (getBoundingClientRect). Adding scrollX
+            // here (unlike the position:absolute toolbar above) would shove the
+            // dialog right by the horizontal scroll amount. Match the top calc,
+            // which correctly omits scrollY.
             top: Math.max(editor.rect.bottom + 16, 80),
-            left: Math.min(
-              window.scrollX + editor.rect.left,
-              window.innerWidth - 340,
-            ),
+            left: Math.min(editor.rect.left, window.innerWidth - 340),
           }}
         >
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
+            // Keyboard support: Escape dismisses, Cmd/Ctrl+Enter saves —
+            // otherwise this capture flow is mouse-only.
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setEditor(null);
+                setComment('');
+              } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                if (!saving) save('comment', comment, editor.anchor);
+              }
+            }}
             placeholder="Add a comment…"
             autoFocus
             className={cn(
@@ -332,6 +374,7 @@ export function Annotator({ pathname }: { pathname: string }) {
               type="button"
               variant="ghost"
               size="sm"
+              disabled={saving}
               onClick={() => {
                 setEditor(null);
                 setComment('');
@@ -342,6 +385,7 @@ export function Annotator({ pathname }: { pathname: string }) {
             <Button
               type="button"
               size="sm"
+              disabled={saving}
               onClick={() => save('comment', comment, editor.anchor)}
             >
               <Sparkles size={12} strokeWidth={1.5} /> save
@@ -375,9 +419,14 @@ export function Annotator({ pathname }: { pathname: string }) {
       )}
 
       {toast && (
-        <div className="robin-toast">
+        <div
+          className="robin-toast"
+          data-kind={toast.kind}
+          role={toast.kind === 'error' ? 'alert' : 'status'}
+          aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}
+        >
           <ArrowUpRight size={14} strokeWidth={1.5} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-          {toast}
+          {toast.message}
         </div>
       )}
     </>

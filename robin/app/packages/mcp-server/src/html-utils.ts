@@ -26,6 +26,87 @@ export async function readPage(absolutePath: string): Promise<ParsedPage> {
 }
 
 /**
+ * Read a Robin HTML file and return BOTH the parsed page and the raw HTML.
+ *
+ * Frontmatter-only rewrites (task.update, link.add) re-assemble the page from a
+ * RobinMeta extracted out of the <head> meta tags. That extraction is lossy in
+ * two ways the assembler can't recover on its own: the human <title> (which
+ * lives only in <title>, not in any robin:* tag) and any robin:* meta key
+ * outside the vocabulary (robin:workflow, robin:category, robin:review-by, …).
+ * Callers that rewrite need the raw HTML to harvest those back, so expose it
+ * alongside the parsed page.
+ */
+export async function readPageWithRaw(
+  absolutePath: string
+): Promise<{ parsed: ParsedPage; html: string }> {
+  const html = await fs.readFile(absolutePath, 'utf8');
+  return { parsed: parseRobinHtml(html), html };
+}
+
+/** Extract the document <title> text from raw page HTML (empty if absent). */
+export function extractTitle(html: string): string {
+  const m = /<title>([\s\S]*?)<\/title>/i.exec(html);
+  if (!m) return '';
+  // Unescape the minimal entities canonicalizeHtml's escapeAttr emits.
+  return m[1]!
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .trim();
+}
+
+/**
+ * robin:* meta names the canonical writer (metaTagsForHead) emits from a
+ * RobinMeta. Any robin:* tag on a page NOT in this set is "unknown" — it
+ * round-trips via raw frontmatter only and is dropped by a meta-only rebuild.
+ * `robin:state` is intentionally included: it is a synonym folded into
+ * robin:status on write, so we must NOT re-emit it as an extra tag.
+ */
+const CANONICAL_ROBIN_META = new Set([
+  'robin:version',
+  'robin:slug',
+  'robin:path',
+  'robin:type',
+  'robin:updated',
+  'robin:created',
+  'robin:summary',
+  'robin:status',
+  'robin:state',
+  'robin:owner',
+  'robin:priority',
+  'robin:size',
+  'robin:due',
+  'robin:role',
+  'robin:relationship',
+  'robin:started',
+  'robin:date',
+  'robin:duration',
+  'robin:tier',
+  'robin:tag',
+  'robin:attendee',
+  'robin:source',
+]);
+
+/**
+ * Collect the robin:* <meta> tags that the canonical writer does NOT re-emit,
+ * so a frontmatter-only rewrite can splice them back into the <head> instead of
+ * silently dropping custom metadata (robin:workflow, robin:category, …).
+ * Returns [name, content] pairs, one per value of a repeated tag.
+ */
+export function extractUnknownMetaTags(parsed: ParsedPage): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  const m = parsed.meta as Record<string, string | string[]>;
+  for (const [name, value] of Object.entries(m)) {
+    if (!name.startsWith('robin:')) continue;
+    if (CANONICAL_ROBIN_META.has(name)) continue;
+    const values = Array.isArray(value) ? value : [value];
+    for (const v of values) out.push([name, v]);
+  }
+  return out;
+}
+
+/**
  * Extract RobinMeta from a ParsedPage's meta record.
  *
  * Delegates to the canonical @robin/converter extractor so the MCP server, the
@@ -104,14 +185,30 @@ export function assemblePage(opts: {
    */
   bodyHtml?: string;
   updated?: Date;
+  /**
+   * The human <title> to preserve on a frontmatter-only rewrite. RobinMeta has
+   * no title field, so a meta-only rebuild otherwise falls back to the slug and
+   * silently clobbers the page title. Threaded into frontmatter.title (which
+   * canonicalizeHtml uses) when frontmatter doesn't already carry one.
+   */
+  title?: string;
+  /**
+   * robin:* <meta> tags the canonical writer does not re-emit (robin:workflow,
+   * robin:category, …). Spliced back into <head> after canonicalization so a
+   * frontmatter-only rewrite preserves custom metadata. Pairs of [name, content].
+   */
+  extraMeta?: Array<[string, string]>;
 }): string {
-  const { slug, vaultRelativePath, frontmatter, blocks, bodyHtml, updated } = opts;
+  const { slug, vaultRelativePath, frontmatter, blocks, bodyHtml, updated, title: titleOpt, extraMeta } = opts;
 
   // Delegate to the converter's canonical assembler — the single source of
   // truth shared with the web write path. Builds the head meta tags from a
   // normalized RobinMeta and emits the v0.2 document shape (no JSON script
   // payloads in <head>; <article> body is canonical).
   const fm: Record<string, unknown> = { ...frontmatter, slug };
+  // Preserve the human title: prefer an explicit frontmatter title, then the
+  // caller-provided original <title>, then the slug as a last resort.
+  if (typeof fm['title'] !== 'string' && titleOpt) fm['title'] = titleOpt;
   const title = typeof fm['title'] === 'string' ? (fm['title'] as string) : slug;
   const { meta } = normalizeFrontmatter({
     frontmatter: fm,
@@ -121,13 +218,35 @@ export function assemblePage(opts: {
     updated: updated ?? new Date(),
   });
 
-  return canonicalizeHtml({
+  let html = canonicalizeHtml({
     meta,
     frontmatter: fm,
     blocks: blocks ?? [],
     bodyHtml,
     updatedAt: updated,
   });
+
+  // Re-emit unknown robin:* meta tags the writer cannot express via RobinMeta.
+  // canonicalizeHtml closes the <head> with the canonical meta block followed by
+  // a newline + </head>; splice ours in just before it so they live in <head>
+  // and survive the next read (parsed.meta picks up every robin:* tag).
+  if (extraMeta && extraMeta.length > 0) {
+    const tagsHtml = extraMeta
+      .map(([name, content]) => `  <meta name="${escapeMetaAttr(name)}" content="${escapeMetaAttr(content)}">`)
+      .join('\n');
+    html = html.replace('\n</head>', `\n${tagsHtml}\n</head>`);
+  }
+
+  return html;
+}
+
+/** Mirror canonicalizeHtml's escapeAttr so spliced meta tags match its escaping. */
+function escapeMetaAttr(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // Serialize log appends within the process. appendLog is a read-modify-write
@@ -194,20 +313,27 @@ const IGNORED_DIRS = new Set([
   'coverage',
   '.next',
   '.git',
-  // Workspace clones and tooling — not part of the knowledge vault.
-  // (The app itself now lives outside the vault, so its old in-vault dir name
-  // is no longer relevant; 'app' guards against a nested app dir if present.)
-  'repos',
-  'app',
-  'tools',
 ]);
 
 /**
- * Recursively collect Robin HTML files under `dir`, skipping dotfiles and any
- * directory in {@link IGNORED_DIRS}. Shared by vault.lint, vault.stats, and
- * page.list so they scan exactly the knowledge vault (brain/, out/, inbox/).
+ * Names that legitimately appear BOTH as knowledge subdirs under `brain/`
+ * (brain/repos, brain/tools) AND as workspace-clone / framework dirs at the
+ * vault root (base/repos, base/tools). We must skip only the root-level ones —
+ * a basename match at any depth would also prune brain/repos and brain/tools,
+ * making their pages invisible to lint/stats/list and falsely flagging every
+ * [[repos/_index]] / [[tools/_index]] link as broken. So these are
+ * path-anchored: skipped only when they sit directly at the vault root.
  */
-export function findVaultHtmlFiles(dir: string): string[] {
+const ROOT_ONLY_IGNORED_DIRS = new Set(['repos', 'app', 'tools']);
+
+/**
+ * Recursively collect Robin HTML files under `dir`, skipping dotfiles and any
+ * directory in {@link IGNORED_DIRS}. `ROOT_ONLY_IGNORED_DIRS` are pruned only at
+ * the vault root (`rootDir`), never under brain/. Shared by vault.lint,
+ * vault.stats, and page.list so they scan exactly the knowledge vault
+ * (brain/, out/, inbox/, logs/).
+ */
+export function findVaultHtmlFiles(dir: string, rootDir: string = dir): string[] {
   const results: string[] = [];
   let entries: fsSync.Dirent[];
   try {
@@ -217,12 +343,15 @@ export function findVaultHtmlFiles(dir: string): string[] {
   }
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
-    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
-    const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      results.push(...findVaultHtmlFiles(full));
+      if (IGNORED_DIRS.has(entry.name)) continue;
+      // Path-anchored: only prune repos/app/tools when they are direct children
+      // of the vault root (workspace clones / framework dirs), not the
+      // knowledge subdirs brain/repos and brain/tools.
+      if (dir === rootDir && ROOT_ONLY_IGNORED_DIRS.has(entry.name)) continue;
+      results.push(...findVaultHtmlFiles(path.join(dir, entry.name), rootDir));
     } else if (entry.isFile() && entry.name.endsWith('.html')) {
-      results.push(full);
+      results.push(path.join(dir, entry.name));
     }
   }
   return results;

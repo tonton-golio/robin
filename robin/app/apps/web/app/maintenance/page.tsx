@@ -192,8 +192,8 @@ export default async function MaintenancePage(): Promise<React.ReactElement> {
                             {item.path ? (
                               <code className="rounded border border-border bg-background px-1.5 py-1">{item.path}</code>
                             ) : null}
-                            {item.meta?.map((meta) => (
-                              <span key={meta} className="rounded border border-border bg-background px-1.5 py-1">
+                            {item.meta?.map((meta, mi) => (
+                              <span key={`${mi}-${meta}`} className="rounded border border-border bg-background px-1.5 py-1">
                                 {meta}
                               </span>
                             ))}

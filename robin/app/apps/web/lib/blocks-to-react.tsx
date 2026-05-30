@@ -65,18 +65,22 @@ function renderBlock(block: RobinBlock, ctx: RenderCtx, key: number | string): R
     case 'taskList':
       return (
         <ul data-block="taskList" key={key}>
-          {block.items.map((item: RobinTaskItem, i: number) => (
-            <li
-              key={i}
-              data-block="task"
-              data-checked={item.checked ? 'true' : 'false'}
-            >
-              {renderInlines(item.content, ctx)}
-              {item.children && item.children.length > 0 && (
-                <div>{item.children.map((c, ci) => renderBlock(c, ctx, ci))}</div>
-              )}
-            </li>
-          ))}
+          {block.items.map((item: RobinTaskItem, i: number) => {
+            // null `checked` = a plain item sharing a mixed list with tasks;
+            // render a bare <li> with no checkbox attributes.
+            const taskProps =
+              item.checked === null
+                ? {}
+                : { 'data-block': 'task', 'data-checked': item.checked ? 'true' : 'false' };
+            return (
+              <li key={i} {...taskProps}>
+                {renderInlines(item.content, ctx)}
+                {item.children && item.children.length > 0 && (
+                  <div>{item.children.map((c, ci) => renderBlock(c, ctx, ci))}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       );
 
@@ -174,7 +178,11 @@ function renderInline(inline: RobinInline, ctx: RenderCtx, key: number | string)
     }
 
     case 'code':
-      return <code key={key}>{inline.text}</code>;
+      return (
+        <React.Fragment key={key}>
+          {wrapMarks(<code>{inline.text}</code>, inline.marks ?? [])}
+        </React.Fragment>
+      );
 
     case 'lineBreak':
       return <br key={key} />;
@@ -190,27 +198,29 @@ function renderInline(inline: RobinInline, ctx: RenderCtx, key: number | string)
       const label = inline.alias ?? inline.slug;
       const resolved = ctx.wikimap.resolve(inline.slug);
 
+      let el: React.ReactNode;
       if (!resolved) {
-        return (
-          <a key={key} data-wiki={inline.slug} data-broken="missing" href={`/p/${inline.slug}`}>
+        el = (
+          <a data-wiki={inline.slug} data-broken="missing" href={`/p/${inline.slug}`}>
             {label}
           </a>
         );
-      }
-
-      if (resolved.archived) {
-        return (
-          <Link key={key} href={vaultPageHref(resolved.path)} data-wiki={inline.slug} data-archived="true">
+      } else if (resolved.archived) {
+        el = (
+          <Link href={vaultPageHref(resolved.path)} data-wiki={inline.slug} data-archived="true">
+            {label}
+          </Link>
+        );
+      } else {
+        el = (
+          <Link href={vaultPageHref(resolved.path)} data-wiki={inline.slug}>
             {label}
           </Link>
         );
       }
 
-      return (
-        <Link key={key} href={vaultPageHref(resolved.path)} data-wiki={inline.slug}>
-          {label}
-        </Link>
-      );
+      // Preserve emphasis wrapping a wikilink (e.g. `**[[page]]**`).
+      return <React.Fragment key={key}>{wrapMarks(el, inline.marks ?? [])}</React.Fragment>;
     }
   }
 }
@@ -218,7 +228,7 @@ function renderInline(inline: RobinInline, ctx: RenderCtx, key: number | string)
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function wrapMarks(
-  text: string,
+  text: React.ReactNode,
   marks: ('bold' | 'italic' | 'strike')[],
 ): React.ReactNode {
   if (marks.length === 0) return text;

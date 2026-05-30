@@ -317,14 +317,21 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
       if (e.data.size > 0) {
         chunksRef.current.push(e.data);
         bufferBytesRef.current += e.data.size;
-        // Bound the in-memory buffer: on a marathon meeting, evict the oldest
-        // chunks once we exceed the cap so the tab can't OOM. The live Deepgram
-        // transcript is unaffected; only the *saved audio file* loses its head.
+        // Bound the in-memory buffer: on a marathon meeting, evict old chunks
+        // once we exceed the cap so the tab can't OOM. The live Deepgram
+        // transcript is unaffected.
+        //
+        // We must NEVER drop chunksRef.current[0]: the first MediaRecorder chunk
+        // carries the WebM/Matroska container header (EBML + codec init). Without
+        // it the assembled blob is undecodable — getBlobDurationSec and any later
+        // transcription fail on the whole file, not just the trimmed window. So
+        // we keep the head and evict the *second*-oldest chunk (index 1), which
+        // drops the earliest audio while preserving a playable container.
         while (
           bufferBytesRef.current > MAX_AUDIO_BUFFER_BYTES &&
-          chunksRef.current.length > 1
+          chunksRef.current.length > 2
         ) {
-          const dropped = chunksRef.current.shift();
+          const dropped = chunksRef.current.splice(1, 1)[0];
           if (dropped) bufferBytesRef.current -= dropped.size;
           setBufferTrimmed(true);
         }

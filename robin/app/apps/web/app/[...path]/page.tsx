@@ -1,7 +1,8 @@
 import { notFound, redirect } from 'next/navigation';
 import { readPage } from '@/lib/read-page';
-import { buildSlugMap } from '@/lib/read-page';
+import { buildSlugMap, resolveWikilinkHrefs, resolveSlug, dedupeBodyHeadings } from '@/lib/read-page';
 import { locateVault } from '@/lib/vault';
+import { normalizeVaultFilePath } from '@/lib/vault-file';
 import { vaultApiFileHref, vaultPageHref } from '@/lib/routes';
 import type { WikiLinkMap } from '@/lib/blocks-to-react';
 import type { Metadata } from 'next';
@@ -47,14 +48,23 @@ export default async function PageRoute({ params }: PageProps) {
 
   const wikimap: WikiLinkMap = {
     resolve(slug: string) {
-      const p = slugMap.get(slug);
+      const p = resolveSlug(slugMap, slug);
       if (!p) return null;
       const archived = p.includes('/archive/');
       return { path: p, archived };
     },
   };
 
-  let page = await readPage(vaultRelativePath);
+  // Run the same allowlist + deny-list + null-byte guard the /file and /api/file
+  // routes use before touching the filesystem. readPage joins straight onto the
+  // vault root, so without this the route would render off-allowlist/sensitive
+  // paths (e.g. inbox/contracts) that the file routes reject. A null result is
+  // treated like a missing page (it still gets the single-segment slug fallback
+  // below — bare slugs like /robin-gist legitimately fail this guard).
+  const safePath = normalizeVaultFilePath(vaultRelativePath);
+  let page = safePath
+    ? await readPage(safePath)
+    : ({ error: 'not_found', filePath: vaultRelativePath } as const);
 
   // Slug-only fallback: a single-segment URL like /some-page-slug can be a slug
   // reference from a wikilink. Look it up in the slug map and redirect to the
@@ -107,7 +117,7 @@ export default async function PageRoute({ params }: PageProps) {
           blocks={page.blocks}
           meta={page.meta}
           wikimap={wikimap}
-          bodyHtml={page.bodyHtml}
+          bodyHtml={dedupeBodyHeadings(resolveWikilinkHrefs(page.bodyHtml, slugMap), page.title)}
         />
       </PageWorkspace>
     </>
@@ -126,7 +136,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   const vaultRelativePath = segments.join('/') + '.html';
-  const page = await readPage(vaultRelativePath);
+  const safePath = normalizeVaultFilePath(vaultRelativePath);
+  if (!safePath) {
+    return { title: 'Not found — Robin' };
+  }
+  const page = await readPage(safePath);
 
   if ('error' in page) {
     return { title: 'Not found — Robin' };

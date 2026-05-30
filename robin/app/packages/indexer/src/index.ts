@@ -125,9 +125,12 @@ export async function createIndexer(opts: IndexerOptions): Promise<Indexer> {
     async getBacklinks(slug: string): Promise<Backlink[]> {
       const rows = db
         .prepare(
+          // Join on from_path (unique) so a backlink resolves to the EXACT source
+          // page — joining on the non-unique from_slug fanned a single backlink
+          // out across every same-slug page (all 24 `_index` hubs).
           `SELECT DISTINCT p.slug AS slug, p.path AS path, p.title AS title, p.type AS type
              FROM links l
-             JOIN pages p ON p.slug = l.from_slug
+             JOIN pages p ON p.path = l.from_path
             WHERE l.to_slug = ?
             ORDER BY p.title`
         )

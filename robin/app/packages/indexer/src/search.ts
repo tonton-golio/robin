@@ -8,11 +8,11 @@
  *   3. 2-hop graph expansion — expand top FTS hits via the links table
  *   4. RRF fusion of the three ranked lists
  *   5. Apply JS-side type/tier/since filters
- *   6. Return top-k with snippets
+ *   6. Apply decay-adjusted final scoring (computeFinalScore) to every
+ *      candidate, then order by final score and return the top-k with snippets
  *
- * Decay scoring: recomputeStaleness() is provided as a placeholder.
- * It calculates a staleness score but does NOT alter SQL ranking in this phase.
- * Wire it in Phase 9.
+ * recomputeStaleness() additionally persists a per-page staleness score for the
+ * maintenance/decay sweep; it does not gate the live ranking computed above.
  */
 
 import type Database from 'better-sqlite3';
@@ -148,7 +148,9 @@ export async function search(
   query: string,
   opts: SearchOptions = {}
 ): Promise<SearchHit[]> {
-  const k = opts.k ?? DEFAULT_K;
+  // Defensively clamp k: a NaN/non-positive value (e.g. a malformed API param
+  // that slipped through) must not disable the result cap below.
+  const k = Number.isFinite(opts.k) && opts.k! > 0 ? Math.floor(opts.k!) : DEFAULT_K;
 
   // Sanitize FTS5 query: escape special chars that would cause parse errors
   const ftsQuery = sanitizeFtsQuery(query);
@@ -229,12 +231,18 @@ export async function search(
     .sort((a, b) => b[1] - a[1])
     .map(([p]) => p);
 
-  // --- 5. Load full records and apply filters ---
-  const results: SearchHit[] = [];
+  // --- 5. Load full records, apply filters, and apply final (decay) scoring ---
+  //
+  // Score-then-sort, not sort-then-cap: the decay/recency/access boost in
+  // computeFinalScore reorders candidates relative to raw RRF order, so a fresh
+  // or frequently-accessed page can rank above an older page that scored higher
+  // on RRF alone. We must therefore score EVERY fused candidate before cutting
+  // to k — breaking the loop early at the RRF cutoff would mask exactly those
+  // pages the decay model is meant to surface. The candidate set is already
+  // bounded by FTS_LIMIT/VEC_LIMIT plus graph expansion, so this stays cheap.
+  const candidates: SearchHit[] = [];
 
   for (const p of sortedPaths) {
-    if (results.length >= k) break;
-
     const row = db
       .prepare('SELECT * FROM pages WHERE path = ?')
       .get(p) as PageRow | undefined;
@@ -261,7 +269,7 @@ export async function search(
     const access30d = row.access_count_30d_rolling ?? 0;
     const score = computeFinalScore(rrfScore, tier, access30d, row.last_accessed, row.updated);
 
-    results.push({
+    candidates.push({
       path: row.path,
       slug: row.slug,
       title: row.title,
@@ -271,7 +279,9 @@ export async function search(
     });
   }
 
-  return results;
+  // Order by final (decay-adjusted) score, then take the top-k.
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates.slice(0, k);
 }
 
 /**

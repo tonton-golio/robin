@@ -132,7 +132,11 @@ function statsFromFilesystem(ctx: ToolContext): VaultStatsOutput {
       const tier = get('tier') ?? 'untiered';
       by_tier[tier] = (by_tier[tier] ?? 0) + 1;
 
-      links += parsed.wikilinkTargets.length;
+      // Count DISTINCT (source, target) pairs per page so this matches the
+      // indexer's `links` total, which is deduplicated by the PRIMARY KEY
+      // (from_slug, to_slug, kind) — repeated wikilinks to the same target
+      // from one page collapse to a single row there.
+      links += new Set(parsed.wikilinkTargets).size;
       allWikilinks.push(...parsed.wikilinkTargets);
     } catch {
       // skip

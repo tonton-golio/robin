@@ -78,8 +78,11 @@ function PageMetaBar({ meta }: { meta: RobinMeta }): React.ReactElement | null {
 
   return (
     <div className="mb-4 flex flex-wrap gap-2">
-      {chips.map((chip) => (
-        <Pill key={chip} tone="neutral">
+      {chips.map((chip, i) => (
+        // Key by index, not chip text: facet values can collide (owner == type/
+        // state, or duplicate tags) producing duplicate-string keys, which warns
+        // and can mis-reconcile chips. The array order is static within a render.
+        <Pill key={`${i}-${chip}`} tone="neutral">
           {chip}
         </Pill>
       ))}

@@ -26,12 +26,15 @@ function renderBlock(block: RobinBlock): string {
     }
     case 'taskList':
       return `<ul data-block="taskList">${block.items
-        .map(
-          (item) =>
-            `<li data-block="task" data-checked="${item.checked ? 'true' : 'false'}">${renderInlines(
-              item.content,
-            )}${item.children ? renderChildren(item.children) : ''}</li>`,
-        )
+        .map((item) => {
+          const inner = `${renderInlines(item.content)}${
+            item.children ? renderChildren(item.children) : ''
+          }`;
+          // A null `checked` is a plain (non-checkbox) item sharing a mixed list
+          // with task items — emit a bare <li> without the task checkbox attrs.
+          if (item.checked === null) return `<li>${inner}</li>`;
+          return `<li data-block="task" data-checked="${item.checked ? 'true' : 'false'}">${inner}</li>`;
+        })
         .join('')}</ul>`;
     case 'codeBlock': {
       const langAttr = block.lang ? ` data-lang="${escapeAttr(block.lang)}"` : '';
@@ -61,11 +64,21 @@ function renderBlock(block: RobinBlock): string {
     case 'thematicBreak':
       return `<hr>`;
     case 'table': {
+      const cols = block.headers.length;
       const headHtml = `<thead><tr>${block.headers
         .map((h) => `<th>${renderInlines(h)}</th>`)
         .join('')}</tr></thead>`;
+      // Normalize each body row to the header column count: pad short rows with
+      // empty <td> and drop any overflow cells so the table stays rectangular
+      // (GFM/mdast can leave ragged rows un-padded).
       const bodyHtml = `<tbody>${block.rows
-        .map((row) => `<tr>${row.map((c) => `<td>${renderInlines(c)}</td>`).join('')}</tr>`)
+        .map((row) => {
+          const cells: string[] = [];
+          for (let i = 0; i < cols; i++) {
+            cells.push(`<td>${row[i] ? renderInlines(row[i]!) : ''}</td>`);
+          }
+          return `<tr>${cells.join('')}</tr>`;
+        })
         .join('')}</tbody>`;
       return `<table>${headHtml}${bodyHtml}</table>`;
     }
@@ -99,7 +112,7 @@ function renderInline(inline: RobinInline): string {
     case 'text':
       return wrapMarks(escapeText(inline.text), inline.marks);
     case 'code':
-      return `<code>${escapeText(inline.text)}</code>`;
+      return wrapMarks(`<code>${escapeText(inline.text)}</code>`, inline.marks);
     case 'lineBreak':
       return `<br>`;
     case 'link':
@@ -112,7 +125,7 @@ function renderInline(inline: RobinInline): string {
         `href="/p/${escapeAttr(inline.slug)}"`,
       ];
       sortAttrsAlpha(attrs);
-      return `<a ${attrs.join(' ')}>${escapeText(label)}</a>`;
+      return wrapMarks(`<a ${attrs.join(' ')}>${escapeText(label)}</a>`, inline.marks);
     }
   }
 }

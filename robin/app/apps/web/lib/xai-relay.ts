@@ -69,6 +69,54 @@ export function getInterviewRuntimeConfig(env: NodeJS.ProcessEnv = process.env):
   };
 }
 
+// ── Reconnect-resumable session state ───────────────────────────────────────
+//
+// The browser VoiceClient auto-reconnects on a dropped socket (see
+// lib/voice-client.ts: up to MAX_RECONNECT_ATTEMPTS with backoff). Each
+// reconnect opens a fresh browser WS → a fresh handleRelayConnection → a fresh,
+// memoryless upstream xAI session. Left naive, every reconnect re-sends the
+// opening greeting, the model forgets everything discussed so far, and the
+// durable .live transcript is split into a new file. To the user a transient
+// network blip looks like "the AI forgot everything".
+//
+// We keep a small per-brief session record alive briefly across the gap so a
+// reconnect can (a) reuse the same transcript file and (b) replay prior turns
+// into the new upstream session and skip the greeting. A fresh start (outside
+// the window, or after a clean stop) begins clean.
+
+interface ReplayTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+interface VoiceSessionState {
+  transcriptStore: InterviewTranscriptStore;
+  turns: ReplayTurn[];
+  /** Set when the browser socket closes; the record is reusable until it expires. */
+  disconnectedAt: number | null;
+}
+
+// Window after a disconnect during which a new connection for the same brief is
+// treated as a reconnect (resume) rather than a new session. Comfortably covers
+// the client's backoff schedule (5 attempts, max ~8s each ≈ <40s) plus slack.
+const RECONNECT_RESUME_WINDOW_MS = 90_000;
+
+// Cap how many prior turns we replay into a fresh upstream session on reconnect.
+// session.turns grows for the whole interview; replaying ALL of it on every
+// reconnect re-sends an ever-larger history, multiplying upstream token cost and
+// latency and eventually risking context-window overflow on a long session. We
+// keep the full turns log intact (for dedup/transcript) but only replay the tail.
+const MAX_REPLAY_TURNS = 40;
+
+// Keyed by safe brief slug. Survives Next dev hot-reloads via globalThis so an
+// in-flight reconnect isn't orphaned by a reload.
+const VOICE_SESSION_KEY = "__robinVoiceSessions__";
+function voiceSessions(): Map<string, VoiceSessionState> {
+  const g = globalThis as unknown as Record<string, Map<string, VoiceSessionState> | undefined>;
+  if (!g[VOICE_SESSION_KEY]) g[VOICE_SESSION_KEY] = new Map();
+  return g[VOICE_SESSION_KEY] as Map<string, VoiceSessionState>;
+}
+
 // Tool definition mirroring voice_relay.py
 const SEARCH_TOOL = {
   type: "function",
@@ -220,11 +268,40 @@ export async function handleRelayConnection(
   const config = getInterviewRuntimeConfig();
   const safeBriefSlug = safeInterviewSlug(briefSlug);
 
+  // Resume vs. fresh: a session record left behind by a recently-dropped socket
+  // for the same brief means this connection is a reconnect. Reuse its
+  // transcript store (same file) and replay its turns into the new upstream.
+  const sessions = voiceSessions();
+  const prior = sessions.get(safeBriefSlug);
+  const isResume =
+    prior != null &&
+    prior.disconnectedAt != null &&
+    Date.now() - prior.disconnectedAt <= RECONNECT_RESUME_WINDOW_MS;
+
   // Server-side transcript capture. The relay sees every frame, so it can
   // persist the conversation to the vault independently of the browser — the
   // transcript survives closing the tab or a crash. The app's "Save & Ingest"
-  // remains the canonical, indexed copy; this is the crash-safety net.
-  const transcriptStore = new InterviewTranscriptStore(safeBriefSlug);
+  // remains the canonical, indexed copy; this is the crash-safety net. On a
+  // reconnect we keep writing to the same file rather than splitting it.
+  const session: VoiceSessionState = isResume
+    ? prior!
+    : { transcriptStore: new InterviewTranscriptStore(safeBriefSlug), turns: [], disconnectedAt: null };
+  session.disconnectedAt = null;
+  sessions.set(safeBriefSlug, session);
+  const transcriptStore = session.transcriptStore;
+
+  // Mirror committed turns the relay observes so a later reconnect can replay
+  // the conversation into a fresh (memoryless) upstream session.
+  const recordTurn = (role: ReplayTurn["role"], text: string): void => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const last = session.turns[session.turns.length - 1];
+    // Skip a verbatim repeat (the same done-event re-fired, or a user turn whose
+    // transcription arrives twice) so replay stays clean.
+    if (last && last.role === role && last.text === trimmed) return;
+    session.turns.push({ role, text: trimmed });
+  };
+
   let transcriptClosed = false;
   const closeTranscript = (): void => {
     if (transcriptClosed) return;
@@ -258,6 +335,21 @@ export async function handleRelayConnection(
     );
   };
 
+  // In Node's `ws` a WebSocket is an EventEmitter, and an 'error' event with no
+  // registered listener THROWS ("Unhandled error event"), which becomes an
+  // uncaught exception that takes down the whole shared Next.js server — not
+  // just voice. Abrupt client drops (ECONNRESET, killed tab, network blip)
+  // routinely make the per-connection socket emit 'error', and the relay's own
+  // design treats abrupt drops as normal (the reconnect-resume window). Attach a
+  // listener for the socket's whole lifetime that logs and closes the upstream
+  // if it's already open; the existing browserWs 'close' handler still runs
+  // afterwards and owns transcript/session lifecycle. `upstream` is hoisted
+  // below and may be undefined during the await-open window, so guard it.
+  browserWs.on("error", (err) => {
+    console.error("[xai-relay] browser socket error:", err);
+    if (upstream && upstream.readyState === WebSocket.OPEN) upstream.close();
+  });
+
   // Build system prompt
   let systemPrompt = "";
   try {
@@ -281,6 +373,7 @@ export async function handleRelayConnection(
     }
     browserWs.on("close", () => {
       console.log("[xai-relay] browser disconnected (stub)");
+      sessions.delete(safeBriefSlug);
       closeTranscript();
     });
     return;
@@ -343,11 +436,39 @@ export async function handleRelayConnection(
   // Inject session config
   upstream.send(JSON.stringify(buildSessionUpdate(systemPrompt, config)));
 
-  // Kick the interview off: have the model greet and ask the first question
-  // before the user speaks. With server-VAD turn detection the assistant would
-  // otherwise wait for user audio and stay silent — but the brief expects the
-  // interviewer to lead, so we request an opening turn explicitly.
-  upstream.send(JSON.stringify({ type: "response.create" }));
+  if (isResume && session.turns.length > 0) {
+    // Reconnect: the new upstream session has no memory of the conversation so
+    // far. Replay prior turns as conversation items to restore context, then
+    // stay quiet — server-VAD picks the interview back up when the user speaks.
+    // We deliberately do NOT send response.create here, so the model neither
+    // re-greets nor immediately monologues over the replayed history.
+    const replay = session.turns.slice(-MAX_REPLAY_TURNS);
+    console.log(`[xai-relay] resuming session (replaying ${replay.length} turns)`);
+    for (const turn of replay) {
+      upstream.send(
+        JSON.stringify({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: turn.role,
+            content: [
+              {
+                // xAI/OpenAI realtime: user history uses input_text, assistant text.
+                type: turn.role === "user" ? "input_text" : "text",
+                text: turn.text,
+              },
+            ],
+          },
+        }),
+      );
+    }
+  } else {
+    // Fresh interview: have the model greet and ask the first question before
+    // the user speaks. With server-VAD turn detection the assistant would
+    // otherwise wait for user audio and stay silent — but the brief expects the
+    // interviewer to lead, so we request an opening turn explicitly.
+    upstream.send(JSON.stringify({ type: "response.create" }));
+  }
 
   // ── Browser → upstream ───────────────────────────────────────────────────
   // The browser only ever sends JSON control events (input_audio_buffer.append,
@@ -367,10 +488,29 @@ export async function handleRelayConnection(
     }
   });
 
-  browserWs.on("close", () => {
-    console.log("[xai-relay] browser closed, closing upstream");
+  browserWs.on("close", (code: number) => {
+    // Distinguish a deliberate stop from a network drop. The browser's stop()
+    // does a clean close (1000); "going away" (1001) is also intentional. Any
+    // other code (or an abrupt drop) is a candidate reconnect: keep the session
+    // record alive for RECONNECT_RESUME_WINDOW_MS and don't finalize the
+    // transcript yet, so the resumed connection continues the same file.
+    const deliberate = code === 1000 || code === 1001;
+    console.log(`[xai-relay] browser closed (code=${code}), closing upstream`);
     if (upstream.readyState === WebSocket.OPEN) upstream.close();
-    closeTranscript();
+    if (deliberate) {
+      sessions.delete(safeBriefSlug);
+      closeTranscript();
+    } else {
+      session.disconnectedAt = Date.now();
+      // Reap the record if no reconnect arrives within the window — finalize the
+      // transcript then so a genuinely-abandoned session still gets saved.
+      setTimeout(() => {
+        if (session.disconnectedAt != null && sessions.get(safeBriefSlug) === session) {
+          sessions.delete(safeBriefSlug);
+          closeTranscript();
+        }
+      }, RECONNECT_RESUME_WINDOW_MS).unref?.();
+    }
   });
 
   // Track whether a model response is currently in flight. We may only send
@@ -407,6 +547,21 @@ export async function handleRelayConnection(
       etype === "response.failed"
     ) {
       responseActive = false;
+    }
+
+    // Mirror committed turns for reconnect replay (same event set the transcript
+    // store keys off, so the in-memory replay log matches the saved file).
+    if (
+      etype === "response.audio_transcript.done" ||
+      etype === "response.output_audio_transcript.done" ||
+      etype === "response.text.done" ||
+      etype === "response.output_text.done"
+    ) {
+      const done = event["transcript"] ?? event["text"];
+      if (typeof done === "string") recordTurn("assistant", done);
+    } else if (etype === "conversation.item.input_audio_transcription.completed") {
+      const userText = event["transcript"];
+      if (typeof userText === "string") recordTurn("user", userText);
     }
 
     if (etype === "input_audio_buffer.speech_started") {
@@ -453,8 +608,19 @@ export async function handleRelayConnection(
 
   upstream.on("close", () => {
     console.log("[xai-relay] upstream closed");
-    if (browserWs.readyState === WebSocket.OPEN) browserWs.close();
-    closeTranscript();
+    // If the upstream drops while the browser is still connected, close the
+    // browser socket — the client will auto-reconnect, spawning a fresh relay
+    // session that resumes this conversation (same transcript file + replayed
+    // turns). The browser-`close` handler owns transcript/session lifecycle
+    // (finalize on a clean stop, hold for the resume window on an abrupt drop),
+    // so we don't finalize here and risk splitting a resumable transcript.
+    if (browserWs.readyState === WebSocket.OPEN) {
+      browserWs.close();
+    } else {
+      // Browser already gone and not coming back via this socket — make sure a
+      // transcript that was never finalized still lands (idempotent).
+      if (session.disconnectedAt == null) closeTranscript();
+    }
   });
 
   upstream.on("error", (err) => {

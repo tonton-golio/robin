@@ -13,20 +13,36 @@
  * link is queryable immediately (before the next scan), but the body write is
  * the source of truth.
  *
- * Idempotent: if the source body already contains a `data-wiki="<to.slug>"`
- * anchor, we leave the body untouched and report created=false.
+ * Idempotent: if the source body already links the target — as the bare slug
+ * `data-wiki="<to.slug>"` OR a path-like `data-wiki="<dir>/<to.slug>"` anchor —
+ * we leave the body untouched and report created=false.
  */
 
 import { z } from 'zod/v4';
 import { blocksToBodyHtml } from '@robin/converter';
 import { resolveRef, mcpError } from '../resolve.js';
-import { readPage, writePage, assemblePage, extractMeta, mdToBlocks } from '../html-utils.js';
+import {
+  readPageWithRaw,
+  writePage,
+  assemblePage,
+  extractMeta,
+  extractTitle,
+  extractUnknownMetaTags,
+  mdToBlocks,
+} from '../html-utils.js';
 import type { ToolContext, LinkAddOutput } from '../types.js';
 
 export const LinkAddInputSchema = z.object({
   from_ref: z.string().min(1).describe('Source slug or path — the page the wikilink is written INTO'),
   to_ref: z.string().min(1).describe('Target slug or path — the page the wikilink points AT'),
-  kind: z.string().optional().default('ref').describe("Link kind (default 'ref'); also used as the relation column in the index"),
+  // NOTE: `kind` is NOT durable. The link is persisted as a plain [[slug]]
+  // wikilink in the source body (the source of truth), which carries no
+  // relation type; the indexer rebuilds the `links` table from those anchors
+  // with a hardcoded kind='wikilink' on every scan. A custom `kind` only
+  // survives in SQLite until the next index.refresh / web resync, then reverts
+  // to 'wikilink'. Kept for back-compat (and immediate-query convenience) but
+  // callers must not rely on typed relations surviving a rescan.
+  kind: z.string().optional().default('ref').describe("Link kind for the immediate index row only — NON-DURABLE: reverts to 'wikilink' on the next reindex"),
 });
 
 export type LinkAddInput = z.infer<typeof LinkAddInputSchema>;
@@ -45,29 +61,57 @@ export async function linkAdd(
 
   // ── Durable body write ─────────────────────────────────────────────────────
   // Read the source page and check whether it already links to the target.
-  const parsed = await readPage(from.absolutePath);
+  const { parsed, html: originalHtml } = await readPageWithRaw(from.absolutePath);
   const existingBody = parsed.bodyHtml ?? '';
-  const alreadyLinked = parsed.wikilinkTargets.includes(to.slug);
+  // Idempotency must catch the target however it is already linked: both as the
+  // bare basename slug and as a path-like target ([[features/images]] →
+  // data-wiki="features/images"). Match in either direction by basename suffix
+  // so a pre-existing path-like link to the same page isn't duplicated.
+  const targetPathNoExt = to.vaultRelativePath.replace(/\.html$/, '');
+  const alreadyLinked = parsed.wikilinkTargets.some(
+    (t) =>
+      t === to.slug ||
+      t === targetPathNoExt ||
+      targetPathNoExt.endsWith(`/${t}`) ||
+      t.endsWith(`/${to.slug}`)
+  );
 
   let created = false;
   if (!alreadyLinked) {
     const meta = extractMeta(parsed, from.vaultRelativePath);
+    const originalTitle = extractTitle(originalHtml);
+    const extraMeta = extractUnknownMetaTags(parsed);
 
     const hasRelated = /<h2[^>]*>\s*Related\s*<\/h2>/i.test(existingBody);
-    const snippetMd = hasRelated
-      ? `- [[${to.slug}]]`
-      : `## Related\n\n- [[${to.slug}]]`;
     // Render through the converter's block pipeline so the appended wikilink
     // anchor (data-wiki + /p/<slug> href) is byte-identical to any other
     // wikilink the converter emits — and is picked up by the indexer's
     // data-wiki scan on the next rescan.
-    const snippetHtml = blocksToBodyHtml(
-      mdToBlocks(snippetMd, from.vaultRelativePath)
+    const liHtml = blocksToBodyHtml(
+      mdToBlocks(`- [[${to.slug}]]`, from.vaultRelativePath)
     );
 
-    const newBody = existingBody.trim().length > 0
-      ? `${existingBody.trim()}\n${snippetHtml.trim()}`
-      : snippetHtml.trim();
+    let newBody: string;
+    const trimmedBody = existingBody.trim();
+    // If a ## Related list already exists and ends the body, fold the new
+    // bullet into that <ul> rather than appending a second standalone list
+    // under the same heading.
+    const trailingUl = /<ul\b[^>]*>[\s\S]*<\/ul>\s*$/i.test(trimmedBody);
+    const newLi = /<li\b[\s\S]*<\/li>/i.exec(liHtml)?.[0];
+    if (hasRelated && trailingUl && newLi) {
+      // Insert the rendered <li> just before the final </ul>.
+      const lastUlClose = trimmedBody.lastIndexOf('</ul>');
+      newBody = `${trimmedBody.slice(0, lastUlClose)}${newLi}${trimmedBody.slice(lastUlClose)}`;
+    } else {
+      const snippetHtml = hasRelated
+        ? liHtml
+        : blocksToBodyHtml(
+            mdToBlocks(`## Related\n\n- [[${to.slug}]]`, from.vaultRelativePath)
+          );
+      newBody = trimmedBody.length > 0
+        ? `${trimmedBody}\n${snippetHtml.trim()}`
+        : snippetHtml.trim();
+    }
 
     const now = new Date();
     const html = assemblePage({
@@ -76,6 +120,8 @@ export async function linkAdd(
       frontmatter: rawFromMeta(meta),
       bodyHtml: newBody,
       updated: now,
+      title: originalTitle || undefined,
+      extraMeta,
     });
     await writePage(from.absolutePath, html);
     created = true;
@@ -85,15 +131,17 @@ export async function linkAdd(
   if (ctx.indexer) {
     try {
       const db = ctx.indexer.db;
+      // Key by from_path (unique) — keying by the non-unique from_slug would
+      // share this row with every same-slug hub page.
       const existStmt = db.prepare(
-        'SELECT 1 FROM links WHERE from_slug = ? AND to_slug = ? AND kind = ?'
+        'SELECT 1 FROM links WHERE from_path = ? AND to_slug = ? AND kind = ?'
       );
-      const existing = existStmt.get(from.slug, to.slug, kind);
+      const existing = existStmt.get(from.vaultRelativePath, to.slug, kind);
       if (!existing) {
         const insertStmt = db.prepare(
-          'INSERT OR IGNORE INTO links (from_slug, to_slug, kind) VALUES (?, ?, ?)'
+          'INSERT OR IGNORE INTO links (from_path, from_slug, to_slug, kind) VALUES (?, ?, ?, ?)'
         );
-        insertStmt.run(from.slug, to.slug, kind);
+        insertStmt.run(from.vaultRelativePath, from.slug, to.slug, kind);
       }
     } catch {
       // indexer unavailable / schema mismatch — the body write is the durable

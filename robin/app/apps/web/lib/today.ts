@@ -51,10 +51,14 @@ export interface TodaySnapshot {
   };
 }
 
+// Sources that arrive as discrete files needing an ingest pass. Annotation
+// streams are deliberately excluded: they are append-only .jsonl logs with
+// their own resolution flow (see lib/annotations.ts), not single sources to
+// ingest, so they would otherwise stick in this card forever and the count
+// could never reach zero ("Inbox clear.").
 const INBOX_DIRS = [
   { dir: 'inbox/meetings', label: 'meeting' },
   { dir: 'inbox/interviews', label: 'interview' },
-  { dir: 'inbox/robin/annotations', label: 'annotation' },
 ];
 
 function ageOf(date: Date): string {
@@ -81,6 +85,9 @@ async function gatherInbox(vault: string): Promise<InboxItem[]> {
       const entries = await fs.readdir(path.join(vault, dir), { withFileTypes: true });
       for (const entry of entries) {
         if (entry.name.startsWith('.') || entry.name === 'archived' || looksLikeReadme(entry.name)) continue;
+        // Skip append-only stream logs (e.g. .jsonl) — they are never "done
+        // ingesting", so they don't belong in a clearable inbox-zero list.
+        if (/\.jsonl$/i.test(entry.name)) continue;
         if (!entry.isFile() && !entry.isDirectory()) continue;
         const rel = `${dir}/${entry.name}`;
         try {
@@ -103,6 +110,20 @@ async function gatherInbox(vault: string): Promise<InboxItem[]> {
   return items.slice(0, 8);
 }
 
+// Keep bullets glanceable: synthesis docs (remsleep, weekly-review) carry dense
+// multi-sentence prose that otherwise lets the hero card dominate the viewport.
+// Prefer the first sentence; hard-cap at ~140 chars with an ellipsis.
+function clampBullet(text: string, max = 140): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const sentenceEnd = t.search(/[.!?](?:\s|$)/);
+  if (sentenceEnd > 0 && sentenceEnd + 1 <= max) return t.slice(0, sentenceEnd + 1);
+  // No early sentence break — cut on a word boundary near the limit.
+  const slice = t.slice(0, max);
+  const lastSpace = slice.lastIndexOf(' ');
+  return `${(lastSpace > max * 0.6 ? slice.slice(0, lastSpace) : slice).trimEnd()}…`;
+}
+
 function extractFirstBullets(text: string, max = 5): string[] {
   // Markdown-style reports / handovers: lines starting with -, * or "1.".
   const lines = text.split(/\n/);
@@ -110,7 +131,7 @@ function extractFirstBullets(text: string, max = 5): string[] {
   for (const line of lines) {
     const m = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)/);
     if (m && m[1]) {
-      out.push(m[1].trim());
+      out.push(clampBullet(m[1].trim()));
       if (out.length >= max) break;
     }
   }
@@ -119,12 +140,12 @@ function extractFirstBullets(text: string, max = 5): string[] {
   // Robin HTML reports (morning-brief / weekly-review / remsleep): pull the
   // first list items, falling back to body paragraphs.
   const listItems = [...text.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)]
-    .map((m) => stripHtml(m[1] ?? ''))
+    .map((m) => clampBullet(stripHtml(m[1] ?? '')))
     .filter(Boolean);
   if (listItems.length > 0) return listItems.slice(0, max);
 
   const paragraphs = [...text.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
-    .map((m) => stripHtml(m[1] ?? ''))
+    .map((m) => clampBullet(stripHtml(m[1] ?? '')))
     .filter(Boolean);
   return paragraphs.slice(0, max);
 }

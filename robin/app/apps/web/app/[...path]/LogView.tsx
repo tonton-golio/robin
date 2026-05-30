@@ -14,6 +14,22 @@ function stripFrontmatter(raw: string): string {
   return raw.replace(/^---\n[\s\S]*?\n---\n+/, '');
 }
 
+/**
+ * Demote every rendered heading one level (h1→h2 … h5→h6) so the log's own
+ * markdown `# Title` doesn't collide with the static chrome <h1> below — keeping
+ * exactly one top-level heading per page. Processed high→low so a level is never
+ * bumped twice. Safe against escaped markup: raw `<h1>` in prose is entity-encoded
+ * by the renderer.html override above, so it never matches these tag patterns.
+ */
+function demoteHeadings(html: string): string {
+  return html
+    .replace(/<(\/?)h5\b/g, '<$1h6')
+    .replace(/<(\/?)h4\b/g, '<$1h5')
+    .replace(/<(\/?)h3\b/g, '<$1h4')
+    .replace(/<(\/?)h2\b/g, '<$1h3')
+    .replace(/<(\/?)h1\b/g, '<$1h2');
+}
+
 interface LogViewProps {
   file: string;
 }
@@ -59,7 +75,7 @@ export async function LogView({ file }: LogViewProps): Promise<React.ReactElemen
   const renderer = new Renderer();
   renderer.html = ({ text }) => escapeHtmlToken(text);
 
-  const html = await marked(stripFrontmatter(raw), { gfm: true, breaks: false, renderer });
+  const html = demoteHeadings(await marked(stripFrontmatter(raw), { gfm: true, breaks: false, renderer }));
 
   return (
     <div className="flex h-full">

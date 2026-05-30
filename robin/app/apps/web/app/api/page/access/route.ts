@@ -19,12 +19,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'missing path param' }, { status: 400 });
   }
 
+  let db: import('better-sqlite3').Database | undefined;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { openDb } = require('@robin/indexer') as { openDb: (p: string) => import('better-sqlite3').Database };
     const vault = locateVault();
     const dbPath = path.join(vault, '.robin', 'index.db');
-    const db = openDb(dbPath);
+    db = openDb(dbPath);
 
     // Ensure columns exist
     const cols = db.prepare('PRAGMA table_info(pages)').all() as { name: string }[];
@@ -44,11 +45,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       WHERE path = @path
     `).run({ now, path: pagePath });
 
-    db.close();
     return NextResponse.json({ ok: true });
   } catch (err) {
     // Non-fatal — client fires this via beacon
     console.warn('[access] indexer unavailable:', String(err));
     return NextResponse.json({ ok: false });
+  } finally {
+    // Always close the handle — a throw on PRAGMA/ALTER/UPDATE (e.g. SQLITE_BUSY
+    // under MCP-watcher write-lock contention) would otherwise leak the fd + WAL
+    // handle on every beacon fired during contention.
+    db?.close();
   }
 }

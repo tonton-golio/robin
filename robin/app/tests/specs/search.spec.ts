@@ -3,52 +3,56 @@ import { test, expect } from '@playwright/test';
 /**
  * search.spec.ts
  *
- * Tests the search box: query returns results, clicking a result navigates
- * to the correct page.
+ * Page search lives in the command palette (⌘K), not on the home dashboard.
+ * These tests open the palette, run a plain (non-slash) query, and confirm it
+ * returns page hits under the "Pages" group and that selecting one navigates.
  */
 
-test.describe('search', () => {
-  test('search box is visible on home page', async ({ page }) => {
-    await page.goto('/');
-    const searchBox = page.getByRole('searchbox');
-    await expect(searchBox).toBeVisible();
-  });
+const PALETTE = '.robin-cmdk';
 
-  test('searching "risk" returns risk-register result', async ({ page }) => {
-    await page.goto('/');
-    const searchBox = page.getByRole('searchbox');
-    await searchBox.fill('risk');
-    // Results panel should appear with a link to risk-register
-    await expect(page.locator('[data-search-results]')).toBeVisible();
-    // Summary of sample meeting also contains "risk register"; use first()
-    await expect(page.locator('[data-search-results]').getByText(/risk register/i).first()).toBeVisible();
+async function openPalette(page: import('@playwright/test').Page) {
+  await page.goto('/');
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(page.locator(PALETTE)).toBeVisible();
+  return page.getByRole('combobox', { name: /command palette/i });
+}
+
+test.describe('search', () => {
+  test('the command palette searches pages', async ({ page }) => {
+    const input = await openPalette(page);
+    await input.fill('risk');
+    await expect(page.locator(`${PALETTE} .robin-cmdk-group`, { hasText: 'Pages' })).toBeVisible();
+    await expect(
+      page.locator(`${PALETTE} .robin-cmdk-item`).filter({ hasText: /risk register/i }),
+    ).toBeVisible();
   });
 
   test('clicking a search result navigates to that page', async ({ page }) => {
-    await page.goto('/');
-    const searchBox = page.getByRole('searchbox');
-    await searchBox.fill('risk');
-    await page.locator('[data-search-results]').getByText(/risk register/i).first().click();
+    const input = await openPalette(page);
+    await input.fill('risk');
+    await page
+      .locator(`${PALETTE} .robin-cmdk-item`)
+      .filter({ hasText: /risk register/i })
+      .first()
+      .click();
     await expect(page).toHaveURL(/risk-register/);
     await expect(page.getByRole('heading', { name: /risk register/i })).toBeVisible();
   });
 
-  test('searching "alex" returns person page result', async ({ page }) => {
-    await page.goto('/');
-    const searchBox = page.getByRole('searchbox');
-    await searchBox.fill('alex');
-    await expect(page.locator('[data-search-results]')).toBeVisible();
-    // Each result has title + summary both matching /alex/; use first()
-    await expect(page.locator('[data-search-results]').getByText(/alex/i).first()).toBeVisible();
+  test('searching for a person returns the person page', async ({ page }) => {
+    const input = await openPalette(page);
+    await input.fill('alex');
+    await expect(
+      page.locator(`${PALETTE} .robin-cmdk-item`).filter({ hasText: /alex rivera/i }),
+    ).toBeVisible();
   });
 
-  test('searching with no matches shows empty state', async ({ page }) => {
-    await page.goto('/');
-    const searchBox = page.getByRole('searchbox');
-    await searchBox.fill('xyzzy-does-not-exist-anywhere');
-    // Either an empty-results element or no results list at all
-    const results = page.locator('[data-search-results]');
-    const count = await results.locator('a').count();
-    expect(count).toBe(0);
+  test('an arbitrary query resolves to results (vector recall, no hang)', async ({ page }) => {
+    // RRF search fuses FTS with vector kNN, which always returns nearest
+    // neighbours — so even an off-vocabulary query surfaces pages rather than
+    // hanging on "Searching…". This guards that the palette always resolves.
+    const input = await openPalette(page);
+    await input.fill('xyzzy nonsense query');
+    await expect(page.locator(`${PALETTE} .robin-cmdk-item`).first()).toBeVisible();
   });
 });

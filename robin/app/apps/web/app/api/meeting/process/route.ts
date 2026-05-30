@@ -216,11 +216,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   let content: string;
+  let finishReason: string | undefined;
   try {
     const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
     };
     content = data.choices?.[0]?.message?.content ?? '';
+    finishReason = data.choices?.[0]?.finish_reason;
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse OpenRouter response: ${err instanceof Error ? err.message : String(err)}` },
@@ -242,5 +244,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  return NextResponse.json({ model, ...coerceResult(parsed, transcript) });
+  const result = coerceResult(parsed, transcript);
+
+  // If the model hit the token cap (finish_reason 'length'), its JSON may still
+  // parse but the cleanedTranscript is silently truncated — everything past the
+  // cutoff is gone. Don't accept a partial transcript silently: fall back to the
+  // original transcript and surface a warning the review UI can display.
+  if (finishReason === 'length') {
+    return NextResponse.json({
+      model,
+      ...result,
+      cleanedTranscript: transcript,
+      warning:
+        'AI output was truncated at the token limit; the cleaned transcript would be ' +
+        'incomplete, so the original transcript is shown instead.',
+    });
+  }
+
+  return NextResponse.json({ model, ...result });
 }

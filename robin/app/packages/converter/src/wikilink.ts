@@ -11,6 +11,12 @@ export interface MdWikilink {
   type: 'wikilink';
   slug: string;
   alias?: string;
+  /**
+   * Marks an `![[...]]` image embed (vs a `[[...]]` link). A dedicated flag
+   * rather than overloading `alias` so a legitimate link whose display text is
+   * literally "embed" (`[[page|embed]]`) is NOT mistaken for an embed.
+   */
+  embed?: boolean;
   data?: { hName?: string; hProperties?: Record<string, unknown>; hChildren?: unknown[] };
 }
 
@@ -52,12 +58,15 @@ export function remarkWikilink() {
 
         // Embed: ![[image.png]] — we render as a paragraph-level node so it's
         // handled at the block layer in mdast-to-blocks; here we emit a
-        // wikilink-ish phrasing node and let the block converter detect it.
+        // wikilink-ish phrasing node (flagged `embed:true`) and let the block
+        // converter detect it. The optional `alias` is the author caption/alt
+        // text (e.g. ![[image.png|My caption]]) and is carried through verbatim.
         if (bang === '!') {
           newChildren.push({
             type: 'wikilink',
             slug: target, // KEEP raw (e.g. "image.png"), no slugify for embeds
-            alias: 'embed',
+            embed: true,
+            ...(alias ? { alias } : {}),
           } as unknown as PhrasingContent);
         } else {
           // Normal wikilink. Slugify the target unless it already looks like a slug.

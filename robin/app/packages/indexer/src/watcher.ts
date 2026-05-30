@@ -10,7 +10,7 @@
 import chokidar from 'chokidar';
 import path from 'path';
 import type Database from 'better-sqlite3';
-import { indexFile, recomputeWikilink } from './index-file.js';
+import { indexFile, recomputeWikilink, hasVecTable } from './index-file.js';
 
 export type WatchEvent = 'add' | 'change' | 'unlink';
 export type WatchCallback = (event: WatchEvent, filePath: string) => void;
@@ -25,6 +25,15 @@ export class Watcher {
   private readonly recentlyWrittenByUs = new Map<string, number>();
 
   private watcher: ReturnType<typeof chokidar.watch> | null = null;
+
+  // Serialize all indexing work onto a single promise chain. chokidar fires
+  // listeners fire-and-forget (it does not await them) and indexFile yields at
+  // its `await embed(...)` between the pages upsert and the links DELETE/reinsert.
+  // Two events for pages sharing a slug (e.g. two `_index.html`) could otherwise
+  // interleave across that await, the later call's slug-keyed DELETE clobbering
+  // the earlier call's just-written links. Chaining guarantees one indexFile /
+  // unlink runs to completion at a time.
+  private indexChain: Promise<void> = Promise.resolve();
 
   constructor(opts: {
     vaultPath: string;
@@ -94,44 +103,59 @@ export class Watcher {
 
     if (this.verbose) console.log(`[watcher] ${event}: ${filePath}`);
 
-    try {
-      await indexFile(this.db, filePath, this.vaultPath);
-    } catch (err) {
-      console.error(`[watcher] index failed for ${filePath}:`, err);
-    }
+    // Serialize onto the shared chain so indexFile's pages-upsert →
+    // recomputeWikilink → await embed → links DELETE/reinsert sequence completes
+    // atomically with respect to other events (no cross-page slug clobber).
+    this.indexChain = this.indexChain
+      .then(() => indexFile(this.db, filePath, this.vaultPath))
+      .catch((err) => {
+        console.error(`[watcher] index failed for ${filePath}:`, err);
+      });
+    await this.indexChain;
 
     this.onEvent?.(event, filePath);
   }
 
-  private handleUnlink(filePath: string): void {
+  private async handleUnlink(filePath: string): Promise<void> {
     if (this.shouldIgnore(filePath)) return;
     if (this.verbose) console.log(`[watcher] unlink: ${filePath}`);
 
     const relPath = path.relative(this.vaultPath, filePath);
-    try {
-      // Remove from pages (triggers also clean up FTS via triggers)
-      const row = this.db
-        .prepare('SELECT slug FROM pages WHERE path = ?')
-        .get(relPath) as { slug: string } | undefined;
+    // Serialize the unlink cleanup on the same chain as indexing so it cannot
+    // interleave with an in-flight indexFile (which awaits embed mid-sequence).
+    this.indexChain = this.indexChain
+      .then(() => {
+        // Read rowid + slug BEFORE deleting the page — the rowid is needed to
+        // drop the matching embedding (pages_vec is keyed by pages.rowid and is
+        // NOT cleaned by the FTS triggers; leaving it leaks, and because pages
+        // is a rowid table SQLite reuses the id for the next inserted page,
+        // silently mis-attributing the stale vector to a different page).
+        const row = this.db
+          .prepare('SELECT rowid, slug FROM pages WHERE path = ?')
+          .get(relPath) as { rowid: number; slug: string } | undefined;
 
-      this.db.prepare('DELETE FROM pages WHERE path = ?').run(relPath);
-      if (row) {
-        // Slugs are not unique (every dir has its own _index). Only drop links
-        // and the resolver row when no other page still carries this slug —
-        // otherwise we'd wipe a surviving sibling's links/resolution.
-        const remaining = this.db
-          .prepare('SELECT COUNT(*) AS n FROM pages WHERE slug = ?')
-          .get(row.slug) as { n: number };
-        if (remaining.n === 0) {
-          this.db.prepare('DELETE FROM links WHERE from_slug = ?').run(row.slug);
+        if (row && hasVecTable(this.db)) {
+          // sqlite-vec requires BigInt for rowid (mirrors index-file.ts).
+          this.db
+            .prepare('DELETE FROM pages_vec WHERE rowid = ?')
+            .run(BigInt(row.rowid));
         }
-        // Recompute the resolver entry from whatever pages remain (clears it
-        // when none are left, de-ambiguates when only one survives).
-        recomputeWikilink(this.db, row.slug);
-      }
-    } catch (err) {
-      console.error(`[watcher] delete failed for ${relPath}:`, err);
-    }
+
+        // Remove from pages (triggers also clean up FTS via triggers)
+        this.db.prepare('DELETE FROM pages WHERE path = ?').run(relPath);
+        // Links are keyed by from_path, so drop exactly this file's outbound
+        // links — a same-slug sibling's links live under its own path and survive.
+        this.db.prepare('DELETE FROM links WHERE from_path = ?').run(relPath);
+        if (row) {
+          // The slug→path resolver is still slug-keyed; recompute from whatever
+          // pages remain (clears it when none are left, de-ambiguates survivors).
+          recomputeWikilink(this.db, row.slug);
+        }
+      })
+      .catch((err) => {
+        console.error(`[watcher] delete failed for ${relPath}:`, err);
+      });
+    await this.indexChain;
 
     this.onEvent?.('unlink', filePath);
   }

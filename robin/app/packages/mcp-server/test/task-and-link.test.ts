@@ -96,6 +96,47 @@ describe('task.update', () => {
       taskUpdate({ ref: 'brain/tasks/empty-update.html' }, ctx)
     ).rejects.toThrow(/at least one of/);
   });
+
+  it('preserves the human <title> and unknown robin:* meta (workflow, category)', async () => {
+    const ctx = makeCtx(vault);
+    // A real v0.2 page carries robin:workflow / robin:category that the meta
+    // vocabulary does not enumerate, and a human <title> that is not the slug.
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Image Generation Feature</title>
+  <link rel="canonical" href="/p/images">
+  <meta name="robin:version" content="0.2">
+  <meta name="robin:slug" content="images">
+  <meta name="robin:path" content="brain/tasks/images.html">
+  <meta name="robin:type" content="task">
+  <meta name="robin:status" content="open">
+  <meta name="robin:updated" content="2026-05-01T00:00:00Z">
+  <meta name="robin:workflow" content="scheduled">
+  <meta name="robin:category" content="beacon">
+</head>
+<body>
+  <article data-robin-doc>
+    <p>A distinctive body sentence.</p>
+  </article>
+</body>
+</html>`;
+    fs.writeFileSync(path.join(vault, 'brain', 'tasks', 'images.html'), html);
+
+    await taskUpdate({ ref: 'brain/tasks/images.html', status: 'done' }, ctx);
+
+    const out = fs.readFileSync(path.join(vault, 'brain', 'tasks', 'images.html'), 'utf8');
+    const parsed = parseRobinHtml(out);
+    const m = parsed.meta as Record<string, string | string[]>;
+    // Status moved...
+    expect(m['robin:status']).toBe('done');
+    // ...but the human title and the custom tags survived (the bug clobbered them).
+    expect(out).toContain('<title>Image Generation Feature</title>');
+    expect(m['robin:workflow']).toBe('scheduled');
+    expect(m['robin:category']).toBe('beacon');
+    expect(parsed.bodyText).toContain('A distinctive body sentence.');
+  });
 });
 
 describe('link.add — durable body write', () => {
@@ -142,6 +183,84 @@ describe('link.add — durable body write', () => {
     const html = fs.readFileSync(path.join(vault, 'brain', 'src.html'), 'utf8');
     const matches = html.match(/data-wiki="dst"/g) ?? [];
     expect(matches.length).toBe(1);
+  });
+
+  it('keeps a single <ul> under one ## Related after two link.add calls', async () => {
+    const ctx = makeCtx(vault);
+    await pageCreate({ folder: 'brain', slug: 'hub', type: 'note', body_md: '# Hub' }, ctx);
+    await pageCreate({ folder: 'brain', slug: 'a', type: 'note', body_md: '# A' }, ctx);
+    await pageCreate({ folder: 'brain', slug: 'b', type: 'note', body_md: '# B' }, ctx);
+
+    await linkAdd({ from_ref: 'hub', to_ref: 'a' }, ctx);
+    await linkAdd({ from_ref: 'hub', to_ref: 'b' }, ctx);
+
+    const html = fs.readFileSync(path.join(vault, 'brain', 'hub.html'), 'utf8');
+    const parsed = parseRobinHtml(html);
+    // Both links are durable...
+    expect(parsed.wikilinkTargets).toContain('a');
+    expect(parsed.wikilinkTargets).toContain('b');
+    // ...but folded into ONE list under ONE heading (the bug appended a 2nd <ul>).
+    expect((html.match(/<ul\b/gi) ?? []).length).toBe(1);
+    expect((html.match(/>\s*Related\s*</gi) ?? []).length).toBe(1);
+  });
+
+  it('does not duplicate when the page already links the target path-like', async () => {
+    const ctx = makeCtx(vault);
+    // Pre-existing page that links the target by its PATH-like form
+    // ([[features/images]]) rather than the bare basename slug.
+    fs.mkdirSync(path.join(vault, 'brain', 'features'), { recursive: true });
+    await pageCreate({ folder: 'brain/features', slug: 'images', type: 'note', body_md: '# Images' }, ctx);
+    await pageCreate(
+      { folder: 'brain', slug: 'consumer', type: 'note', body_md: '# Consumer\n\nSee [[features/images]] for details.' },
+      ctx
+    );
+
+    const res = await linkAdd({ from_ref: 'consumer', to_ref: 'features/images' }, ctx);
+    // Already linked path-like → no duplicate bare-slug link written.
+    expect(res.created).toBe(false);
+
+    const html = fs.readFileSync(path.join(vault, 'brain', 'consumer.html'), 'utf8');
+    expect((html.match(/data-wiki="images"/g) ?? []).length).toBe(0);
+    expect((html.match(/data-wiki="features\/images"/g) ?? []).length).toBe(1);
+  });
+
+  it('preserves the source page <title> and unknown robin:* meta when adding a link', async () => {
+    const ctx = makeCtx(vault);
+    await pageCreate({ folder: 'brain', slug: 'target', type: 'note', body_md: '# Target' }, ctx);
+    // Hand-author a source page carrying a human title + custom robin:* tags.
+    const srcHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Production Deployment Setup</title>
+  <link rel="canonical" href="/p/prod-deploy">
+  <meta name="robin:version" content="0.2">
+  <meta name="robin:slug" content="prod-deploy">
+  <meta name="robin:path" content="brain/prod-deploy.html">
+  <meta name="robin:type" content="task">
+  <meta name="robin:workflow" content="scheduled">
+  <meta name="robin:category" content="infra">
+</head>
+<body>
+  <article data-robin-doc>
+    <p>Original prose here.</p>
+  </article>
+</body>
+</html>`;
+    fs.writeFileSync(path.join(vault, 'brain', 'prod-deploy.html'), srcHtml);
+
+    const res = await linkAdd({ from_ref: 'brain/prod-deploy.html', to_ref: 'target' }, ctx);
+    expect(res.created).toBe(true);
+
+    const out = fs.readFileSync(path.join(vault, 'brain', 'prod-deploy.html'), 'utf8');
+    const parsed = parseRobinHtml(out);
+    const m = parsed.meta as Record<string, string | string[]>;
+    expect(out).toContain('<title>Production Deployment Setup</title>');
+    expect(m['robin:workflow']).toBe('scheduled');
+    expect(m['robin:category']).toBe('infra');
+    // The link itself is durable and the original prose survived.
+    expect(parsed.wikilinkTargets).toContain('target');
+    expect(parsed.bodyText).toContain('Original prose here.');
   });
 });
 

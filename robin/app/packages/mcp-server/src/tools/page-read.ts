@@ -33,17 +33,20 @@ export async function pageRead(
   if (ctx.indexer) {
     try {
       const db = ctx.indexer.db;
+      // links carry from_path (the exact source page); use it directly rather
+      // than resolving the non-unique from_slug through the wikilinks table.
       const stmt = db.prepare(
-        'SELECT from_slug, kind FROM links WHERE to_slug = ?'
+        'SELECT from_path, from_slug, kind FROM links WHERE to_slug = ?'
       );
-      const rows = stmt.all(resolved.slug) as Array<{ from_slug: string; kind: string }>;
+      const rows = stmt.all(resolved.slug) as Array<{
+        from_path: string;
+        from_slug: string;
+        kind: string;
+      }>;
       for (const row of rows) {
-        // Try to resolve from_slug to a path
-        const pathStmt = db.prepare('SELECT path FROM wikilinks WHERE slug = ?');
-        const pathRow = pathStmt.get(row.from_slug) as { path: string } | undefined;
         linksIn.push({
           slug: row.from_slug,
-          path: pathRow?.path ?? '',
+          path: row.from_path ?? '',
           kind: row.kind,
         });
       }

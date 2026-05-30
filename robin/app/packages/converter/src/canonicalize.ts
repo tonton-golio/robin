@@ -102,7 +102,14 @@ function escapeAttr(s: string): string {
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    // Escape control whitespace so a multi-line value (e.g. a folded `summary:`)
+    // stays on a single physical line, preserving the one-meta-per-line invariant
+    // the line-oriented migration regexes rely on. HTML-parser readers decode
+    // these back to the original characters.
+    .replace(/\r/g, '&#13;')
+    .replace(/\n/g, '&#10;')
+    .replace(/\t/g, '&#9;');
 }
 
 function indentLines(text: string, spaces: number): string {

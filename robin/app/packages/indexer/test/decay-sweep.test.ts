@@ -142,3 +142,60 @@ describe('runDecaySweep()', () => {
     expect(r1.staleness).toBeCloseTo(r2.staleness, 5);
   });
 });
+
+describe('runDecaySweep() — rolling-counter day-idempotency', () => {
+  const DAILY_DECAY = Math.exp(-1 / 30);
+
+  function freshDb() {
+    const db = openInMemoryDb();
+    const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'robin-decay-id-'));
+    fs.mkdirSync(path.join(vault, 'brain'), { recursive: true });
+    return { db, vault };
+  }
+
+  async function seedPage(db: ReturnType<typeof openInMemoryDb>, vault: string, rolling: number) {
+    const fp = path.join(vault, 'brain', 'hot.html');
+    fs.writeFileSync(fp, makeFixture('hot', 'note', isoAgo(1)));
+    await indexFile(db, fp, vault);
+    // Seed a non-zero rolling counter so decay is observable (fixtures start 0).
+    db.prepare('UPDATE pages SET access_count_30d_rolling = ? WHERE slug = ?').run(rolling, 'hot');
+  }
+
+  function rolling(db: ReturnType<typeof openInMemoryDb>): number {
+    return (
+      db.prepare('SELECT access_count_30d_rolling AS r FROM pages WHERE slug = ?').get('hot') as {
+        r: number;
+      }
+    ).r;
+  }
+
+  it('decays the rolling counter exactly once per calendar day', async () => {
+    const { db, vault } = freshDb();
+    await seedPage(db, vault, 10);
+
+    // First sweep applies one day of decay.
+    runDecaySweep(db, NOW);
+    expect(rolling(db)).toBeCloseTo(10 * DAILY_DECAY, 6);
+
+    // Re-running on the SAME day must NOT decay again (factor = 1).
+    runDecaySweep(db, NOW);
+    runDecaySweep(db, NOW);
+    expect(rolling(db)).toBeCloseTo(10 * DAILY_DECAY, 6);
+  });
+
+  it('compounds decay across elapsed days', async () => {
+    const { db, vault } = freshDb();
+    await seedPage(db, vault, 10);
+
+    // Anchor at local noon so adding whole days never straddles a midnight/DST
+    // boundary that would shift the calendar-day count.
+    const d0 = new Date();
+    const noon0 = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), 12).getTime();
+    const noon3 = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + 3, 12).getTime();
+
+    runDecaySweep(db, noon0); // 1 day (first-ever sweep)
+    // A sweep three calendar days later applies three more days of decay.
+    runDecaySweep(db, noon3);
+    expect(rolling(db)).toBeCloseTo(10 * DAILY_DECAY ** 4, 6);
+  });
+});

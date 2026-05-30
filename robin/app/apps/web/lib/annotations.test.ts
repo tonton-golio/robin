@@ -56,6 +56,28 @@ describe('annotation event projection', () => {
     expect(annotation?.status).toBe('needs-attention');
     expect(isClosedAnnotationStatus(annotation?.status ?? '')).toBe(false);
   });
+
+  it('does not let a later timestamp-less event override a resolved status', () => {
+    // A malformed/hand-edited later event (no created/updated/resolved_at) must
+    // NOT resurrect an 'open' status over a previously-resolved, timestamped one.
+    const [annotation] = collapseAnnotationEvents<AnnotationEvent>([
+      {
+        id: 'ann_3',
+        event: 'annotation.resolved',
+        status: 'resolved',
+        resolved_at: '2026-05-29T10:00:00Z',
+      },
+      {
+        id: 'ann_3',
+        event: 'annotation.created',
+        status: 'open',
+        // no timestamp at all — comes later in file order
+      },
+    ]);
+
+    expect(annotation?.status).toBe('resolved');
+    expect(isClosedAnnotationStatus(annotation?.status ?? '')).toBe(true);
+  });
 });
 
 describe('annotation input normalization', () => {

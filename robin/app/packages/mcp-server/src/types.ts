@@ -265,4 +265,6 @@ export interface ScanResult {
   errors: number;
   wikilinks: number;
   ambiguous: number;
+  /** Rows removed for files no longer on disk (optional for fallback impls). */
+  pruned?: number;
 }

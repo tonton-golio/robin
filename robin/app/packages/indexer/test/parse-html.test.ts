@@ -147,6 +147,84 @@ describe('parseRobinHtml — v0.2 (no script payloads)', () => {
   });
 });
 
+describe('parseRobinHtml — bodyHtml serializer emits real HTML attribute names', () => {
+  // Regression: serializeToHtml previously returned hast's React/DOM property
+  // names verbatim (className, colSpan, htmlFor, strokeWidth) for everything but
+  // data-*. Frontmatter-only writes splice bodyHtml back to disk, so that
+  // corrupted the durable brain: class= became className= (CSS dropped), colspan=
+  // became colSpan= (tables collapsed), inline-SVG attrs broke.
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Attr Page</title>
+  <meta name="robin:slug" content="attr-page">
+  <meta name="robin:type" content="note">
+</head>
+<body>
+  <article data-robin-doc>
+    <p class="lead" data-tone="warm">Lead.<wbr>break</p>
+    <table><tbody><tr><td colspan="2" rowspan="3">cell</td></tr></tbody></table>
+    <label for="field">Label</label>
+    <svg viewBox="0 0 10 10" preserveAspectRatio="xMidYMid">
+      <path stroke-width="2" d="M0 0"></path>
+      <use xlink:href="#a"></use>
+    </svg>
+  </article>
+</body>
+</html>`;
+
+  it('maps className → class (not className=)', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('class="lead"');
+    expect(bodyHtml).not.toContain('className');
+  });
+
+  it('maps colSpan/rowSpan → colspan/rowspan', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('colspan="2"');
+    expect(bodyHtml).toContain('rowspan="3"');
+    expect(bodyHtml).not.toContain('colSpan');
+    expect(bodyHtml).not.toContain('rowSpan');
+  });
+
+  it('maps htmlFor → for', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('for="field"');
+    expect(bodyHtml).not.toContain('htmlFor');
+  });
+
+  it('preserves SVG camelCase attrs (viewBox, preserveAspectRatio) verbatim', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('viewBox="0 0 10 10"');
+    expect(bodyHtml).toContain('preserveAspectRatio="xMidYMid"');
+    expect(bodyHtml).not.toContain('view-box');
+  });
+
+  it('kebab-cases hyphenated SVG props back (strokeWidth → stroke-width)', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('stroke-width="2"');
+    expect(bodyHtml).not.toContain('strokeWidth');
+  });
+
+  it('restores the xlink:href namespace (not x-link-href)', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('xlink:href="#a"');
+    expect(bodyHtml).not.toContain('x-link-href');
+  });
+
+  it('emits <wbr> as a void tag (no </wbr>)', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('<wbr>');
+    expect(bodyHtml).not.toContain('</wbr>');
+  });
+
+  it('keeps data-* attributes kebab-cased', () => {
+    const { bodyHtml } = parseRobinHtml(html);
+    expect(bodyHtml).toContain('data-tone="warm"');
+  });
+});
+
 describe('parseRobinHtml — golden file 03-brain-index', () => {
   const html = fs.readFileSync(GOLDEN_INDEX, 'utf-8');
 

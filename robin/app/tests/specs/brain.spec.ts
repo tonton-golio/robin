@@ -40,12 +40,21 @@ test.describe('brain pages', () => {
   });
 
   test('meeting artifact page loads', async ({ page }) => {
-    await page.goto('/p/logs/meetings/2026-05-26-sample');
+    await page.goto('/p/out/meetings/2026-05-26-sample');
     await expect(page.getByRole('heading', { name: /sample meeting/i })).toBeVisible();
   });
 
   test('page title reflects doc title', async ({ page }) => {
     await page.goto('/p/brain/risk-register');
     await expect(page).toHaveTitle(/risk register/i);
+  });
+
+  test('body serializer preserves class and colspan attributes', async ({ page }) => {
+    await page.goto('/p/brain/serializer-check');
+    // The web serializer must map hast property aliases back to real HTML
+    // attributes: className→class (space-joined), colSpan→colspan. A regression
+    // emits class-name/col-span, which browsers ignore.
+    await expect(page.locator('article[data-robin-doc] p.callout.lead')).toBeVisible();
+    await expect(page.locator('article[data-robin-doc] td[colspan="2"]')).toBeVisible();
   });
 });

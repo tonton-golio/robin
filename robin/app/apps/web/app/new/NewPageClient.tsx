@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createPage } from '@/lib/actions/page';
+import { vaultPageHref } from '@/lib/routes';
 import {
   PageHeader,
   Button,
@@ -66,9 +67,10 @@ export function NewPageClient(): React.ReactElement {
         return;
       }
 
-      // Navigate to edit the new page
-      const editPath = `/${folder}/${slugified}/edit`;
-      router.push(editPath);
+      // Navigate to the newly created page's read view. There is no in-app
+      // editor route yet, so a `/edit` target would 404; use the canonical
+      // page href derived from the server-normalized vault path.
+      router.push(vaultPageHref(result.path ?? `${folder}/${slugified}.html`));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create page');
       setCreating(false);
@@ -140,7 +142,7 @@ export function NewPageClient(): React.ReactElement {
               Cancel
             </Button>
             <Button type="submit" disabled={creating || !slugified} className="flex-1">
-              {creating ? 'Creating…' : 'Create & edit'}
+              {creating ? 'Creating…' : 'Create page'}
             </Button>
           </div>
         </form>

@@ -3,7 +3,8 @@ import { test, expect } from '@playwright/test';
 /**
  * smoke.spec.ts
  *
- * Basic sanity checks: home page renders and the file-tree navigation is visible.
+ * Basic sanity checks: the home dashboard renders with the primary nav rail, and
+ * the file tree on /vault shows the top-level vault sections.
  */
 
 test.describe('smoke', () => {
@@ -12,27 +13,25 @@ test.describe('smoke', () => {
     await expect(page).toHaveTitle(/robin/i);
   });
 
-  test('file tree navigation is visible', async ({ page }) => {
+  test('primary navigation rail is visible', async ({ page }) => {
     await page.goto('/');
-    // The left-nav file tree should render as a <nav> element
-    await expect(page.getByRole('navigation')).toBeVisible();
+    // The left rail is the app's primary navigation landmark.
+    await expect(page.getByRole('navigation', { name: /primary/i })).toBeVisible();
   });
 
-  test('brain section is present in tree', async ({ page }) => {
-    await page.goto('/');
-    // Directory nodes render as "▾ brain/" buttons — match by accessible name
-    // using a regex anchored to the exact dir name to avoid substring conflicts.
-    await expect(
-      page.getByRole('button', { name: /brain\// })
-    ).toBeVisible({ timeout: 10000 });
+  test('file tree is visible on the vault page', async ({ page }) => {
+    await page.goto('/vault');
+    await expect(page.locator('.vault-tree')).toBeVisible();
   });
 
-  test('out section is present in tree', async ({ page }) => {
-    await page.goto('/');
-    // Use accessible name regex anchored at word boundary to avoid matching
-    // a folder like "about_alex/" which also contains "out" as a substring.
-    await expect(
-      page.getByRole('button', { name: /\bout\// })
-    ).toBeVisible({ timeout: 10000 });
+  test('brain section is present in the vault tree', async ({ page }) => {
+    await page.goto('/vault');
+    // Directory rows render as role="button" with the folder name.
+    await expect(page.getByRole('button', { name: /^brain$/i })).toBeVisible({ timeout: 10000 });
+  });
+
+  test('out section is present in the vault tree', async ({ page }) => {
+    await page.goto('/vault');
+    await expect(page.getByRole('button', { name: /^out$/i })).toBeVisible({ timeout: 10000 });
   });
 });

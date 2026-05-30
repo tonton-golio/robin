@@ -62,14 +62,25 @@ const GROUP_COLOR: Record<string, string> = {
   unknown: '#5d626b',
 };
 
-const GROUPS = [
-  { key: 'all', label: 'All' },
-  { key: 'project', label: 'Projects', color: GROUP_COLOR.project },
-  { key: 'task', label: 'Tasks', color: GROUP_COLOR.task },
-  { key: 'decision', label: 'Decisions', color: GROUP_COLOR.decision },
-  { key: 'knowledge', label: 'Knowledge', color: GROUP_COLOR.knowledge },
-  { key: 'person', label: 'People', color: GROUP_COLOR.person },
-];
+// Human labels + preferred display order for each group key. The legend and
+// filter chips are derived from the groups actually present in the fetched data
+// (see groupsInData), so they can never drift from what the API emits.
+const GROUP_LABEL: Record<string, string> = {
+  project: 'Projects',
+  task: 'Tasks',
+  decision: 'Decisions',
+  knowledge: 'Knowledge',
+  hub: 'Hubs',
+  person: 'People',
+  memory: 'Memory',
+  note: 'Notes',
+  unknown: 'Other',
+};
+const GROUP_ORDER = ['project', 'task', 'decision', 'knowledge', 'hub', 'person', 'memory', 'note', 'unknown'];
+
+function labelForGroup(key: string): string {
+  return GROUP_LABEL[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 function linkId(l: GraphLink): string {
   const s = typeof l.source === 'string' ? l.source : l.source.id;
@@ -93,7 +104,15 @@ export function BrainGraph() {
   const [filter, setFilter] = useState<string>('all');
   const [hover, setHover] = useState<{ node: GraphNode; sx: number; sy: number } | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(''); // raw input value (controlled)
+  const [searchTerm, setSearchTerm] = useState(''); // debounced value that drives filtering
+
+  // Debounce the search term so typing doesn't rebuild `filtered`, reset the
+  // fit, and re-run the force simulation on every keystroke (visible churn).
+  useEffect(() => {
+    const id = setTimeout(() => setSearchTerm(search), 200);
+    return () => clearTimeout(id);
+  }, [search]);
 
   useEffect(() => {
     fetch('/api/graph')
@@ -145,9 +164,27 @@ export function BrainGraph() {
     return m;
   }, [data]);
 
+  // Derive legend + filter chips from the groups actually present in the data,
+  // ordered by GROUP_ORDER, so they can never advertise a color/filter that
+  // matches zero nodes (or omit a dominant one).
+  const groupsInData = useMemo(() => {
+    const present = new Set<string>();
+    if (data) for (const n of data.nodes) present.add(n.group);
+    const ordered = [...present].sort((a, b) => {
+      const ia = GROUP_ORDER.indexOf(a);
+      const ib = GROUP_ORDER.indexOf(b);
+      return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+    });
+    return ordered.map((key) => ({
+      key,
+      label: labelForGroup(key),
+      color: GROUP_COLOR[key] ?? GROUP_COLOR.note,
+    }));
+  }, [data]);
+
   const filtered = useMemo<GraphData | null>(() => {
     if (!data) return null;
-    const term = search.trim().toLowerCase();
+    const term = searchTerm.trim().toLowerCase();
     if (filter === 'all' && !term) return data;
 
     let keep = new Set<string>(data.nodes.map((n) => n.id));
@@ -168,7 +205,7 @@ export function BrainGraph() {
       return keep.has(s) && keep.has(t);
     });
     return { nodes, links };
-  }, [data, filter, search, nodeById]);
+  }, [data, filter, searchTerm, nodeById]);
 
   const hoverInfo = useMemo(() => {
     if (!hover) return null;
@@ -215,10 +252,13 @@ export function BrainGraph() {
 
   // Fit once the simulation settles after a data/filter change, not before —
   // fitting mid-layout leaves the cluster off-center as nodes keep spreading.
+  // Only re-fit when the visible node SET changes (not on every new `filtered`
+  // object identity), so narrowing search doesn't make the viewport jump.
   const shouldFitRef = useRef(true);
+  const nodeKey = filtered ? `${filtered.nodes.length}:${filtered.nodes.map((n) => n.id).join('|')}` : '';
   useEffect(() => {
     shouldFitRef.current = true;
-  }, [filtered]);
+  }, [nodeKey]);
   const handleEngineStop = useCallback(() => {
     if (!shouldFitRef.current) return;
     shouldFitRef.current = false;
@@ -235,13 +275,14 @@ export function BrainGraph() {
               }`
             : 'loading…'}
         </div>
-        <div className="graph-controls">
-          {GROUPS.map((g) => (
+        <div className="graph-controls" role="group" aria-label="Filter nodes by type">
+          {[{ key: 'all', label: 'All' }, ...groupsInData].map((g) => (
             <button
               key={g.key}
               type="button"
               className="graph-chip"
               data-active={filter === g.key}
+              aria-pressed={filter === g.key}
               onClick={() => setFilter(g.key)}
             >
               {g.label}
@@ -254,15 +295,17 @@ export function BrainGraph() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="search nodes…"
             className="graph-search"
+            type="search"
+            aria-label="Search nodes"
           />
-          <button type="button" className="graph-chip" onClick={refit} title="Fit to view">
+          <button type="button" className="graph-chip" onClick={refit} title="Fit to view" aria-label="Fit graph to view">
             fit
           </button>
         </div>
       </div>
 
       <div className="graph-legend">
-        {GROUPS.filter((g) => g.key !== 'all').map((g) => (
+        {groupsInData.map((g) => (
           <span key={g.key} className="graph-legend-item">
             <span className="graph-legend-dot" style={{ background: g.color }} />
             {g.label}
@@ -270,10 +313,31 @@ export function BrainGraph() {
         ))}
       </div>
 
+      {/* Keyboard / screen-reader equivalent for the canvas: a navigable list of
+          the currently-visible nodes as links. The canvas itself is decorative
+          for AT (aria-hidden), so this list is the accessible path to every page. */}
+      {filtered && (
+        <nav className="sr-only" aria-label="Brain graph nodes">
+          <ul>
+            {filtered.nodes.map((n) => (
+              <li key={n.id}>
+                <a href={n.href}>
+                  {n.label} — {n.type}, {n.degree} link{n.degree === 1 ? '' : 's'}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
       {filtered && (() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const Graph = ForceGraph2D as unknown as React.ComponentType<any>;
+        // The force-graph canvas is a pointer-only visualization; AT users get
+        // the equivalent navigable node list above, so hide the canvas from the
+        // accessibility tree rather than expose an unusable widget.
         return (
+          <div aria-hidden="true">
           <Graph
             ref={ref}
             graphData={filtered}
@@ -309,6 +373,7 @@ export function BrainGraph() {
               ctx.fillText(node.label, (node.x ?? 0) + (node.__size ?? 5) + 2, (node.y ?? 0) + 3);
             }}
           />
+          </div>
         );
       })()}
 

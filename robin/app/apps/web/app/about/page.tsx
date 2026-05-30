@@ -84,7 +84,7 @@ export default async function AboutPage() {
 
       <h2>Stack</h2>
       <p>
-        Next.js 16 · React 19 · Tailwind 4 · BlockNote editor · SQLite FTS5 + vector search ·
+        Next.js 16 · React 19 · Tailwind 4 · SQLite FTS5 + vector search ·
         Force-directed graph (Canvas) · Claude Code skills · MCP server · single-user, local-only.
       </p>
 

@@ -17,8 +17,10 @@
 import { z } from 'zod/v4';
 import { resolveRef, mcpError } from '../resolve.js';
 import {
-  readPage,
+  readPageWithRaw,
   extractMeta,
+  extractTitle,
+  extractUnknownMetaTags,
   writePage,
   mergeFrontmatter,
   assemblePage,
@@ -66,8 +68,13 @@ export async function taskUpdate(
   }
 
   const resolved = await resolveRef(input.ref, ctx);
-  const parsed = await readPage(resolved.absolutePath);
+  const { parsed, html: originalHtml } = await readPageWithRaw(resolved.absolutePath);
   const meta = extractMeta(parsed, resolved.vaultRelativePath);
+  // Preserve metadata the lossy RobinMeta round-trip would drop: the human
+  // <title> (no RobinMeta field) and any non-vocabulary robin:* tag
+  // (robin:workflow, robin:category, …).
+  const originalTitle = extractTitle(originalHtml);
+  const extraMeta = extractUnknownMetaTags(parsed);
 
   // Reconstruct the existing frontmatter from meta (v0.2 pages carry no inline
   // frontmatter JSON; <head> meta tags are authoritative).
@@ -91,13 +98,16 @@ export async function taskUpdate(
     updated: now.toISOString(),
   });
 
-  // Preserve the existing body verbatim (frontmatter-only change).
+  // Preserve the existing body verbatim (frontmatter-only change), plus the
+  // human <title> and any unknown robin:* tags the meta-only rebuild can't.
   const html = assemblePage({
     slug: meta.slug,
     vaultRelativePath: resolved.vaultRelativePath,
     frontmatter: updatedRaw,
     bodyHtml: parsed.bodyHtml,
     updated: now,
+    title: originalTitle || undefined,
+    extraMeta,
   });
   await writePage(resolved.absolutePath, html);
 

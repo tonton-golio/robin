@@ -75,33 +75,17 @@ async function buildTree(
 
   for (const file of files) {
     const relPath = `${relDir}/${file.name}`;
-    let mtime: string | undefined;
-    let fileType: string | undefined;
-
-    const absFile = path.join(absDir, file.name);
     const isHtml = file.name.endsWith('.html');
     const isKnownLog =
       relPath === 'logs/changelog.md' ||
       relPath === 'logs/ingest-log.md' ||
       relPath === 'logs/repo-log.md';
 
-    try {
-      const stat = await fs.stat(absFile);
-      mtime = stat.mtime.toISOString();
-
-      if (isHtml) {
-        const handle = await fs.open(absFile, 'r');
-        const buf = Buffer.alloc(2048);
-        await handle.read(buf, 0, 2048, 0);
-        await handle.close();
-        const head = buf.toString('utf-8');
-        const typeMatch = /robin:type"[^>]*content="([^"]+)"/i.exec(head);
-        fileType = typeMatch?.[1];
-      }
-    } catch {
-      // ok, mtime/type are optional
-    }
-
+    // The tree sidebar consumes only name/path/kind/children, so we deliberately
+    // avoid stat()-ing and head-reading every file here — doing so cost hundreds
+    // of syscalls per request and scaled linearly with vault size. If type/mtime
+    // are needed again, source them from the index in one query rather than
+    // re-reading files on every tree fetch.
     const nodeKind: TreeNode['kind'] = isKnownLog ? 'log' : isHtml ? 'page' : 'file';
     const nodePath = isKnownLog
       ? relPath === 'logs/ingest-log.md'
@@ -115,8 +99,6 @@ async function buildTree(
       name: file.name.replace(/\.(html|md)$/, ''),
       path: nodePath,
       kind: nodeKind,
-      type: fileType,
-      mtime,
     });
   }
 

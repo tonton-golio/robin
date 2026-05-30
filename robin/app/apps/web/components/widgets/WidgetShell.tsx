@@ -41,6 +41,13 @@ export function WidgetShell({ id, title, icon: Icon, accent, live, statusLabel, 
       role="dialog"
       aria-label={`${title} widget`}
       aria-hidden={!isOpen}
+      // The body stays mounted while collapsed (so live sessions keep running),
+      // but opacity:0 + pointer-events:none does NOT remove its focusable
+      // controls from the tab order — a keyboard/SR user would land focus on
+      // invisible, unactivatable controls inside an aria-hidden subtree (the
+      // axe aria-hidden-focus violation). `inert` takes the whole subtree out of
+      // the tab order and accessibility tree without unmounting it.
+      inert={!isOpen}
       initial={false}
       animate={
         isOpen

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Command } from 'cmdk';
+import { Dialog, VisuallyHidden } from 'radix-ui';
 import {
   Sunrise,
   FolderTree,
@@ -150,24 +151,33 @@ export function CommandPalette({
     router.push(href);
   }
 
-  if (!open) return null;
-
   const showQuickActions = !query;
 
   return (
-    <div className="robin-cmdk-overlay" onClick={() => onOpenChange(false)}>
-      <div
-        className={`robin-cmdk${isCommandMode ? ' robin-cmdk--command' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            onOpenChange(false);
-          }
-        }}
-        data-mode={isCommandMode ? 'command' : 'search'}
-      >
-        <Command label="Robin command palette" shouldFilter={false}>
+    // Command.Dialog is built on Radix Dialog: it provides role=dialog,
+    // aria-modal, a focus trap, scroll lock, Escape-to-close, and focus
+    // restoration to the trigger. Reuse the existing palette styling by
+    // passing the overlay/panel class names through.
+    <Command.Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      label="Robin command palette"
+      shouldFilter={false}
+      overlayClassName="robin-cmdk-overlay"
+      contentClassName={`robin-cmdk${isCommandMode ? ' robin-cmdk--command' : ''}`}
+      data-mode={isCommandMode ? 'command' : 'search'}
+    >
+          {/* Command.Dialog renders a Radix Dialog, which requires an accessible
+              Title (and warns about a missing Description) for screen readers.
+              The palette is visually self-evident, so hide both off-screen.
+              cmdk and we share a single hoisted @radix-ui/react-dialog, so this
+              Dialog.Title/Description resolves the same Dialog context. */}
+          <VisuallyHidden.Root>
+            <Dialog.Title>Robin command palette</Dialog.Title>
+            <Dialog.Description>
+              Search pages or type / to run a command.
+            </Dialog.Description>
+          </VisuallyHidden.Root>
           <div className="robin-cmdk-inputrow">
             {isCommandMode && (
               <span className="robin-cmdk-mode-badge" aria-hidden>
@@ -187,7 +197,10 @@ export function CommandPalette({
           <Command.List className="robin-cmdk-list">
             {/* Command mode: leading "/" filters the action list */}
             {isCommandMode && matchedCommands.length > 0 && (
-              <Command.Group heading="Commands">
+              // Omit cmdk's `heading` prop: it renders a second, unstyled
+              // heading element on top of our styled label below. The styled
+              // div is the visible group label.
+              <Command.Group>
                 <div className="robin-cmdk-group">Commands</div>
                 {matchedCommands.map((cmd) => {
                   const Icon = cmd.icon;
@@ -214,7 +227,7 @@ export function CommandPalette({
 
             {/* Idle: quick actions + the slash hint */}
             {showQuickActions && (
-              <Command.Group heading="Quick actions">
+              <Command.Group>
                 <div className="robin-cmdk-group">Quick actions</div>
                 {QUICK_ACTIONS.map((cmd) => {
                   const Icon = cmd.icon;
@@ -239,7 +252,7 @@ export function CommandPalette({
 
             {/* Search mode */}
             {!isCommandMode && query && hits.length > 0 && (
-              <Command.Group heading="Pages">
+              <Command.Group>
                 <div className="robin-cmdk-group">Pages</div>
                 {hits.map((hit) => (
                   <Command.Item
@@ -268,8 +281,6 @@ export function CommandPalette({
             <span>↑ ↓ navigate · ↵ {isCommandMode ? 'run' : 'open'} · esc close</span>
             <span>{isCommandMode ? '/ command' : '⌘K'}</span>
           </div>
-        </Command>
-      </div>
-    </div>
+    </Command.Dialog>
   );
 }

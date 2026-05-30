@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { RefreshCw, Check, AlertTriangle } from 'lucide-react';
 
@@ -28,6 +29,7 @@ interface Toast {
 }
 
 export function ResyncButton() {
+  const router = useRouter();
   const [state, setState] = useState<State>('idle');
   const [toast, setToast] = useState<Toast | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -75,6 +77,10 @@ export function ResyncButton() {
         title: data.mode === 'fallback' ? 'Reindexed brain + outputs (no index db)' : 'Reindexed brain + outputs',
         detail: `${parts.join(' · ')}${secs ? ` · ${secs}s` : ''}`,
       });
+      // Re-fetch the server components for the current route so index-backed
+      // views (maintenance, search, backlinks) reflect the fresh scan without a
+      // manual reload — otherwise the toast is the only visible effect.
+      router.refresh();
       window.setTimeout(() => setState('idle'), 1200);
       window.setTimeout(() => setToast(null), 4000);
     } catch (err) {

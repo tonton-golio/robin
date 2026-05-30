@@ -87,8 +87,17 @@ function TreeRow({
           className="vault-tree-node"
           style={{ paddingLeft: indent }}
           onClick={() => setOpen((v) => !v)}
+          // Make the folder row keyboard-operable: Enter/Space toggle it, and
+          // aria-expanded exposes the open/closed state to assistive tech.
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setOpen((v) => !v);
+            }
+          }}
           role="button"
           tabIndex={0}
+          aria-expanded={open}
         >
           <span className="vault-tree-chevron" data-open={open}>
             <ChevronRight size={12} strokeWidth={1.5} />
@@ -123,18 +132,43 @@ export function VaultTree() {
   const path = usePathname() ?? '';
   const [tree, setTree] = useState<TreeNode[] | null>(null);
   const [query, setQuery] = useState('');
+  const [error, setError] = useState(false);
+  // Bumped to retry after a failed load.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setError(false);
     fetch('/api/tree')
-      .then((r) => r.json())
-      .then((d: TreeNode[]) => setTree(d));
-  }, []);
+      .then((r) => {
+        if (!r.ok) throw new Error(`tree fetch failed: ${r.status}`);
+        return r.json();
+      })
+      .then((d: unknown) => {
+        if (cancelled) return;
+        // Default to an empty tree on an unexpected shape so the rest of the
+        // sidebar stays usable rather than wedging on "Loading…".
+        setTree(Array.isArray(d) ? (d as TreeNode[]) : []);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const sections = useMemo(() => {
     if (!tree) return null;
     // Group top-level roots: brain, out, inbox, logs
     return tree;
   }, [tree]);
+
+  // True only once the tree has loaded and nothing matches the active filter.
+  const hasMatches = useMemo(
+    () => !sections || !query || sections.some((root) => nodeMatches(root, query)),
+    [sections, query],
+  );
 
   return (
     <aside className="vault-tree">
@@ -147,12 +181,40 @@ export function VaultTree() {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      {!sections && <div style={{ color: 'var(--text-2)', fontSize: 12, padding: 8 }}>Loading…</div>}
-      {sections?.map((root) => (
-        <div key={root.path}>
-          <TreeRow node={root} depth={0} currentPath={path} query={query} />
+      {error && (
+        <div style={{ color: 'var(--text-2)', fontSize: 12, padding: 8 }}>
+          Couldn’t load the vault tree.{' '}
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: 'var(--text-1)',
+              font: 'inherit',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+            }}
+          >
+            Retry
+          </button>
         </div>
-      ))}
+      )}
+      {!error && !sections && (
+        <div style={{ color: 'var(--text-2)', fontSize: 12, padding: 8 }}>Loading…</div>
+      )}
+      {!error && sections && !hasMatches && (
+        <div style={{ color: 'var(--text-2)', fontSize: 12, padding: 8 }}>
+          No pages match “{query}”.
+        </div>
+      )}
+      {!error &&
+        sections?.map((root) => (
+          <div key={root.path}>
+            <TreeRow node={root} depth={0} currentPath={path} query={query} />
+          </div>
+        ))}
     </aside>
   );
 }

@@ -42,14 +42,22 @@ export async function getBlobDurationSec(
   if (blob.size > MAX_DECODE_BYTES || typeof AudioContext === 'undefined') {
     return fallbackSec ?? null;
   }
+  // Hoist the context so it's released on BOTH the success and decode-rejection
+  // paths. Chrome hard-limits concurrent AudioContexts (~6 per document); a
+  // decode that rejects (corrupt/partial blob, odd container) and never closes
+  // the context would, after a few failures, exhaust the pool and break both
+  // meeting recording and the voice interview (which also construct contexts).
+  let ctx: AudioContext | null = null;
   try {
     const buffer = await blob.arrayBuffer();
-    const ctx = new AudioContext();
+    ctx = new AudioContext();
     const decoded = await ctx.decodeAudioData(buffer);
-    await ctx.close();
     return decoded.duration;
   } catch {
     return fallbackSec ?? null;
+  } finally {
+    // .catch keeps a failing close() from masking the real return value.
+    await ctx?.close().catch(() => {});
   }
 }
 

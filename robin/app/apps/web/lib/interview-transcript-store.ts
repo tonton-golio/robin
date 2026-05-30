@@ -38,6 +38,8 @@ export class InterviewTranscriptStore {
   private closed = false;
   private writing = false;
   private dirtySinceWrite = false;
+  /** The in-flight write, so close() can await it before forcing a final write. */
+  private writePromise: Promise<void> = Promise.resolve();
 
   constructor(private briefSlug: string) {
     this.dir = vaultPath("logs", "interviews", ".live");
@@ -81,6 +83,22 @@ export class InterviewTranscriptStore {
       ) {
         const done = event["transcript"] ?? event["text"];
         const text = (typeof done === "string" ? done : this.assistantBuf).trim();
+        this.assistantBuf = "";
+        if (text) {
+          this.turns.push({ role: "assistant", text });
+          this.scheduleFlush();
+        }
+        return;
+      }
+      // A response can terminate WITHOUT a transcript .done — notably on barge-in,
+      // where the relay sends response.cancel and xAI may emit response.cancelled
+      // (or response.done with status=cancelled) before any content part is
+      // finalized. Without this, the partial deltas would stay in assistantBuf and
+      // bleed into the NEXT assistant turn, corrupting the saved transcript. Flush
+      // any in-flight buffer here as a finalized turn. A normal .done already
+      // cleared the buffer above, so this is a no-op in the common case.
+      if (type === "response.done" || type === "response.cancelled") {
+        const text = this.assistantBuf.trim();
         this.assistantBuf = "";
         if (text) {
           this.turns.push({ role: "assistant", text });
@@ -135,25 +153,48 @@ export class InterviewTranscriptStore {
     }
     this.writing = true;
     this.dirtySinceWrite = false;
-    try {
-      await fsp.mkdir(this.dir, { recursive: true });
-      // Atomic-ish: write a temp file then rename, so a crash mid-write never
-      // leaves a truncated transcript.
-      const tmp = `${this.filePath}.tmp`;
-      await fsp.writeFile(tmp, this.render(), "utf-8");
-      await fsp.rename(tmp, this.filePath);
-    } catch (e) {
-      console.error("[interview-transcript] flush failed:", e);
-    } finally {
-      this.writing = false;
-      if (this.dirtySinceWrite) this.scheduleFlush();
-    }
+    // Expose the active write as a promise so close() can await the bytes
+    // actually landing before it forces a final flush and reports success.
+    this.writePromise = (async () => {
+      try {
+        await fsp.mkdir(this.dir, { recursive: true });
+        // Atomic-ish: write a temp file then rename, so a crash mid-write never
+        // leaves a truncated transcript.
+        const tmp = `${this.filePath}.tmp`;
+        await fsp.writeFile(tmp, this.render(), "utf-8");
+        await fsp.rename(tmp, this.filePath);
+      } catch (e) {
+        console.error("[interview-transcript] flush failed:", e);
+      } finally {
+        this.writing = false;
+        if (this.dirtySinceWrite) this.scheduleFlush();
+      }
+    })();
+    await this.writePromise;
   }
 
   /** Final flush on session end. Cancels any pending debounce. */
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    // Drain any in-flight write, then re-flush the newest state. flush() no-ops
+    // (just sets dirtySinceWrite) if a write is already running, so close() must
+    // first await the active write — otherwise it would resolve and log "saved"
+    // while the latest turns are only persisted by a debounce timer that may not
+    // fire before the process exits.
+    while (this.writing) {
+      try {
+        await this.writePromise;
+      } catch {
+        break;
+      }
+    }
+    // The drained write's finally may have re-armed scheduleFlush; cancel it so
+    // close() owns the final write and leaves no stray timer keeping the loop alive.
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;

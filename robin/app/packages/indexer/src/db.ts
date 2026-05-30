@@ -36,7 +36,10 @@ function getSqliteVecPath(): string | null {
 // v2: pages.slug is no longer UNIQUE. Slugs are not globally unique in the
 // vault (every directory has an `_index` page); the unique key is `path`.
 // Resolution prefers path matching and falls back to a unique basename slug.
-const SCHEMA_VERSION = 2;
+// v3: links table re-keyed from (from_slug,…) to (from_path,…) so non-unique
+// slugs (every dir's `_index`) no longer collapse outbound links / fan out
+// backlinks. Bumping the version drops + rebuilds the derived tables on a rescan.
+const SCHEMA_VERSION = 3;
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -93,14 +96,22 @@ CREATE TRIGGER IF NOT EXISTS pages_ad
     VALUES ('delete', old.rowid, old.title, old.summary, old.body_text);
   END;
 
+-- Outbound links are keyed by the SOURCE page's vault-relative PATH, not its
+-- slug: slugs are NOT unique (every directory has its own _index page — 24 of
+-- them share slug _index in a real vault), so keying by from_slug collapsed
+-- every hub page's outbound links into one shared row set and made backlinks fan
+-- out across all same-slug pages. from_slug is retained for display + the
+-- heuristic 2-hop search expansion; from_path is the identity.
 CREATE TABLE IF NOT EXISTS links (
+  from_path TEXT NOT NULL,
   from_slug TEXT NOT NULL,
   to_slug   TEXT NOT NULL,
   kind      TEXT NOT NULL DEFAULT 'wikilink',
-  PRIMARY KEY (from_slug, to_slug, kind)
+  PRIMARY KEY (from_path, to_slug, kind)
 );
 
 CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_slug);
+CREATE INDEX IF NOT EXISTS idx_links_from_path ON links(from_path);
 CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug);
 
 CREATE TABLE IF NOT EXISTS wikilinks (

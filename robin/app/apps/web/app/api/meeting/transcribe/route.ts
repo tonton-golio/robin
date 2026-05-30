@@ -12,10 +12,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
 import { transcribe } from '@/lib/whisper';
 import { vaultPath } from '@/lib/vault';
-import { normalizeVaultFilePath } from '@/lib/vault-file';
+import { normalizeVaultReadPath, statVaultFile } from '@/lib/vault-file';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,19 +38,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Resolve as a vault-relative path under the allowlist. Absolute paths and
-  // `..` escapes are rejected — never transcribe arbitrary files on disk.
-  const safeAudioPath = normalizeVaultFilePath(audioPath);
+  // `..` escapes are rejected — never transcribe arbitrary files on disk. We use
+  // the READ validator (not normalizeVaultFilePath) because this route reads its
+  // own just-uploaded recording; the serve deny-list would wrongly reject the
+  // `.webm` audio we have to transcribe.
+  const safeAudioPath = normalizeVaultReadPath(audioPath);
   if (!safeAudioPath) {
     return NextResponse.json({ error: 'invalid audioPath' }, { status: 400 });
   }
   const absPath = vaultPath(safeAudioPath);
 
   // Verify the file exists before handing off (gives a clearer error than
-  // whatever whisper-node would throw).
+  // whatever whisper-node would throw). statVaultFile also runs the realpath
+  // containment check, so a symlink pointing outside the vault is rejected.
   const whisperMode = process.env['ROBIN_WHISPER_MODE'] ?? 'local';
   if (whisperMode !== 'stub') {
     try {
-      await fs.access(absPath);
+      const stat = await statVaultFile(safeAudioPath);
+      if (!stat.isFile) throw new Error('not a file');
     } catch {
       return NextResponse.json(
         { error: `Audio file not found: ${audioPath}` },

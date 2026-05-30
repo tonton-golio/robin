@@ -179,7 +179,14 @@ function escapeAttr(s: string): string {
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    // Keep every <meta> tag on one physical line: a newline/CR/tab embedded in
+    // meta content (e.g. a multi-line summary) would otherwise split the tag
+    // across lines and confuse the line-oriented migration regexes. Matches the
+    // canonicalize.ts copy of escapeAttr.
+    .replace(/\r/g, '&#13;')
+    .replace(/\n/g, '&#10;')
+    .replace(/\t/g, '&#9;');
 }
 
 function indentLines(text: string, spaces: number): string {

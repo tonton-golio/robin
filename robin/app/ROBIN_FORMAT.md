@@ -184,12 +184,14 @@ The converter applies the following normalizations:
 
 The mapping is encoded in `packages/converter/src/meta.ts` as a `FieldMapping[]` table.
 
-## BlockNote as future editor
+## In-app editor (future)
 
-BlockNote is the planned editor for Phase 5 but is not wired into the UI yet. Blocks are **not** stored on disk in v0.2 — body HTML is the only persisted content.
+The web app is read-only today; pages are authored via the agent / files / MCP. An
+in-app rich-text editor remains possible but is intentionally **not** wired in. Blocks
+are **not** stored on disk in v0.2 — body HTML is the only persisted content.
 
 - The converter still uses the frozen, vendored blocks-to-HTML emitter (`packages/converter/src/blocks-to-html.ts`) as an in-memory intermediate when transforming markdown input to canonical HTML. The block tree never reaches the file.
-- If BlockNote is wired in later: an html→blocks parse runs at editor open time, blocks→html serialization runs at save time. Block `id` fields stay session-local and are regenerated each load. The file format does not change.
+- If an editor is wired in later: an html→blocks parse runs at editor open time, blocks→html serialization runs at save time. Block `id` fields stay session-local and are regenerated each load. The file format does not change.
 
 ## Pre-commit hook
 

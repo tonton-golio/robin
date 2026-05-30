@@ -3,7 +3,7 @@ import { listBrainPages, pageHref, type CatalogPage } from '@/lib/catalog';
 import { readPage } from '@/lib/read-page';
 import { locateVault } from '@/lib/vault';
 import type { MaintenanceItem, Severity } from './types';
-import { metaContent, isValidDate, readText, severityRank, titleFromPath, walk } from './shared';
+import { attrValue, isValidDate, readText, severityRank, titleFromPath, walk } from './shared';
 
 export interface WikiSection {
   title: string;
@@ -195,11 +195,17 @@ async function scanBrainMetaIssues(): Promise<{ issues: MetaIssue[]; parseErrors
     }
 
     const title = page.title || titleFromPath(relFile);
-    const slug = metaContent(html, 'robin:slug');
-    const updated = metaContent(html, 'robin:updated');
-    const summary = metaContent(html, 'robin:summary');
-    const metaPath = metaContent(html, 'robin:path');
-    const type = metaContent(html, 'robin:type');
+    // Detect RAW tag presence from the on-disk HTML — readPage.meta backfills
+    // slug/path/type/updated defaults (parse.ts), so it can never report a
+    // *missing* tag. Build the name→content map in ONE pass over the document
+    // instead of re-scanning every <meta> per lookup (the old metaContent did 5
+    // full-document scans per file, a needless cost on a force-dynamic route).
+    const metaMap = extractMetaMap(html);
+    const slug = metaMap.get('robin:slug');
+    const updated = metaMap.get('robin:updated');
+    const summary = metaMap.get('robin:summary');
+    const metaPath = metaMap.get('robin:path');
+    const type = metaMap.get('robin:type');
 
     if (!page.title.trim()) {
       issues.push({ path: relFile, title, issue: 'missing title', severity: 'warning', href });
@@ -234,6 +240,24 @@ async function scanBrainMetaIssues(): Promise<{ issues: MetaIssue[]; parseErrors
     parseErrors,
     issues: issues.sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || a.path.localeCompare(b.path)),
   };
+}
+
+/**
+ * Single-pass extractor for `name → content` of every <meta> tag in a document.
+ * Replaces N separate full-document scans (one per metaContent lookup) with one
+ * scan, so the meta-issue check reads each brain page's <meta> block only once.
+ * On duplicate names the first wins, matching metaContent's prior behavior.
+ */
+function extractMetaMap(html: string): Map<string, string | undefined> {
+  const map = new Map<string, string | undefined>();
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    const name = attrValue(tag, 'name');
+    // First tag with a given name wins (incl. its possibly-absent content),
+    // exactly as the old per-lookup metaContent returned the first match.
+    if (!name || map.has(name)) continue;
+    map.set(name, attrValue(tag, 'content'));
+  }
+  return map;
 }
 
 function isOrphanCandidate(page: CatalogPage): boolean {

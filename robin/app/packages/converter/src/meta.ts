@@ -44,7 +44,12 @@ export function normalizeDate(value: unknown): string | undefined {
   const trimmed = value.trim();
   if (ISO_DATE_RE.test(trimmed)) return `${trimmed}T00:00:00Z`;
   if (ISO_DATETIME_RE.test(trimmed)) {
-    const d = new Date(trimmed);
+    // A zone-less datetime (e.g. "2026-05-26T10:30:00") is parsed as LOCAL time
+    // by `new Date`, so .toISOString() would shift it by the host's offset and
+    // produce different on-disk timestamps per machine. Anchor it to UTC so the
+    // conversion is deterministic across timezones.
+    const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(trimmed);
+    const d = new Date(hasZone ? trimmed : `${trimmed}Z`);
     if (!isNaN(d.getTime())) return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
   }
   // Unknown date format — return as-is rather than fail; round-tripped via raw.

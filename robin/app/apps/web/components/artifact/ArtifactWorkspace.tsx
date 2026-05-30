@@ -189,11 +189,17 @@ export function ArtifactWorkspace({ title, filePath, pagePath, fileUrl, mtime }:
 
   const go = useCallback(
     (i: number) => {
+      // Clamp here so every caller (buttons AND the keyboard handler, which has
+      // no bounds check of its own) stays in range and aligned with the deck.
+      // The deck's robinDeck.show() clamps the actual slide, but the unclamped
+      // setCurrent ran last and won, leaving React state out of range (counter
+      // showing "0 / N" or "N+1 / N", pin layer empty) until the next valid press.
+      const n = Math.max(0, Math.min(slideCount - 1, i));
       const win = frameRef.current?.contentWindow as (Window & { robinDeck?: { show: (n: number) => void } }) | null;
-      win?.robinDeck?.show(i);
-      setCurrent(i);
+      win?.robinDeck?.show(n);
+      setCurrent(n);
     },
-    [],
+    [slideCount],
   );
 
   // Keyboard nav for decks.

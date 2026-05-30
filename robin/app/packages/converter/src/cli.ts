@@ -178,7 +178,7 @@ function runMigrate(args: string[]) {
           '\n' +
           'Paths may be files, directories (walked recursively for *.html), or simple\n' +
           'globs containing ** or *. Examples:\n' +
-          '  robin-convert migrate --to v0.2 brain/about_anton/strategy-2026.html\n' +
+          '  robin-convert migrate --to v0.2 brain/risk-register.html\n' +
           '  robin-convert migrate --to v0.2 brain out\n' +
           '  robin-convert migrate --to v0.2 "brain/**/*.html" --dry-run\n',
       );
@@ -281,14 +281,23 @@ function expandGlob(pattern: string): string[] {
   const literalDir = literal.endsWith('/') ? literal.slice(0, -1) : path.dirname(literal);
   const baseDir = literalDir && fs.existsSync(literalDir) ? literalDir : '.';
 
-  // Convert glob → RegExp. ** = any path, * = any except '/'.
+  // Convert glob → RegExp.
+  //   `**/` spans zero-or-more directory segments (so `brain/**/*.html` matches
+  //         both `brain/x.html` and `brain/a/x.html`) → `(?:.*/)?`
+  //   `**`  (standalone/trailing) → `.*`
+  //   `*`   → any run of non-slash chars → `[^/]*`
+  //   `?`   → a single non-slash char → `[^/]`
+  // Sentinels (plain ASCII placeholders) keep the multi-step rewrite from clashing.
   const regexSrc =
     '^' +
     pattern
       .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*\*/g, ' DOUBLE_STAR ')
+      .replace(/\*\*\//g, '@@GLOBSTAR_SLASH@@')
+      .replace(/\*\*/g, '@@GLOBSTAR@@')
       .replace(/\*/g, '[^/]*')
-      .replace(/ DOUBLE_STAR /g, '.*') +
+      .replace(/\?/g, '[^/]')
+      .replace(/@@GLOBSTAR_SLASH@@/g, '(?:.*/)?')
+      .replace(/@@GLOBSTAR@@/g, '.*') +
     '$';
   const re = new RegExp(regexSrc);
 

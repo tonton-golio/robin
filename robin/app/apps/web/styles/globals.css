@@ -516,14 +516,20 @@ body {
   z-index: 100;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 14vh;
 }
 
+/* cmdk renders the overlay and the dialog content as SIBLINGS in the portal, so
+   the content needs its own positioning + a higher z-index than the overlay.
+   Without this the static-positioned content sat BEHIND the fixed overlay, which
+   swallowed pointer events — palette results were keyboard-only, not clickable. */
 .robin-cmdk {
+  position: fixed;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 101;
   width: min(640px, calc(100vw - 24px));
+  max-height: 72vh;
   border-radius: 12px;
   border: 1px solid var(--border-1);
   background: var(--bg-1);
@@ -2733,5 +2739,182 @@ body {
   .robin-doc-article * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   A11y: visible keyboard focus.
+   Many inputs/chips set `outline: none` for mouse aesthetics, which also
+   removed the keyboard-navigation cue. Restore a consistent amber focus ring
+   for KEYBOARD focus only (:focus-visible), so mouse interaction is unchanged.
+   Appended last so it wins specificity ties against component `outline:none`.
+   ───────────────────────────────────────────────────────────────────────── */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible,
+[role="option"]:focus-visible,
+[role="tab"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--robin-amber, #fbbf24);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Wrapped text inputs: ring the container when the inner input is focused. */
+.tasks-search:focus-within,
+.tasks-filter-row:focus-within {
+  outline: 2px solid var(--robin-amber, #fbbf24);
+  outline-offset: 1px;
+  border-radius: 8px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Responsive layout.
+   Desktop is mobile-last: these rules only engage at narrow viewports and are
+   appended last so equal-specificity overrides win source-order ties. Nothing
+   here changes ≥769px, so the desktop layout is untouched.
+
+   Two new shell affordances (hidden by default, shown only on mobile):
+   - .robin-mobile-menu  — a hamburger in the topbar that opens the rail drawer
+   - .robin-rail-backdrop — a scrim that closes the drawer on tap
+   ───────────────────────────────────────────────────────────────────────── */
+.robin-mobile-menu { display: none; }
+.robin-rail-backdrop { display: none; }
+
+/* Tablet: collapse the two-column home grid before it gets cramped. */
+@media (max-width: 768px) {
+  .today-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Mobile (≤639px): rail becomes a slide-in overlay; content goes full-width. */
+@media (max-width: 639px) {
+  /* Shell drops to a single content column; the rail overlays above it. */
+  .robin-shell,
+  .robin-shell[data-rail="open"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .robin-rail {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    width: 244px;
+    height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+  }
+  .robin-shell[data-rail="open"] .robin-rail {
+    transform: translateX(0);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  }
+
+  /* The overlay rail is always wide, so force its expanded (labelled) styling
+     regardless of the collapsed/open data attr that governs desktop width. */
+  .robin-shell .robin-rail-item-label,
+  .robin-shell .robin-rail-brand-name {
+    display: inline;
+  }
+  .robin-shell .robin-rail-item {
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+  .robin-shell .robin-rail-brand {
+    margin: 0 0 14px;
+    width: 100%;
+    justify-content: flex-start;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  /* Scrim behind the open drawer. */
+  .robin-shell[data-rail="open"] .robin-rail-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    border: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+  }
+
+  /* Topbar: surface the hamburger, tighten spacing, drop the ⌘K hint. */
+  .robin-topbar {
+    padding: 0 12px;
+    gap: 10px;
+  }
+  .robin-mobile-menu {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .robin-crumbs {
+    font-size: 11px;
+    gap: 4px;
+  }
+  .robin-crumbs-sep {
+    display: none;
+  }
+  .robin-iconbtn-pill kbd {
+    display: none;
+  }
+
+  /* Page shells: reclaim the wasted side/bottom padding on small screens. */
+  .today-page,
+  .tasks-page,
+  .outputs-page,
+  .vault-viewer {
+    padding: 22px clamp(14px, 4vw, 20px) 28px;
+  }
+
+  /* Vault: stack the file tree above the reader instead of a 260px sidebar. */
+  .vault-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: calc(100dvh - 48px);
+  }
+  .vault-tree {
+    max-height: 42vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-0);
+  }
+
+  /* Tasks: search and filters go full-width; head stacks vertically. */
+  .tasks-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .tasks-search {
+    margin-left: 0;
+    width: 100%;
+  }
+  .tasks-search input {
+    min-width: 0;
+    flex: 1;
+    width: 100%;
+  }
+
+  /* Graph: compact toolbar + a hover card that always fits the viewport. */
+  .graph-page-toolbar {
+    top: 8px;
+    left: 8px;
+    gap: 6px;
+    max-width: calc(100vw - 16px);
+  }
+  .graph-search {
+    min-width: 0;
+    width: 100%;
+  }
+  .graph-hover {
+    width: min(280px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
   }
 }

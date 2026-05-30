@@ -21,6 +21,7 @@ import {
 interface MemoryRecord {
   id: string;
   type: string;
+  tier: string;
   status: string;
   confidence: string;
   scope: string;
@@ -31,7 +32,12 @@ interface MemoryRecord {
   links: string[];
   source_count: number;
   seen_count: number;
+  supersedes: string[];
+  superseded_by?: string;
+  resolution?: string;
+  created_at: string;
   updated_at: string;
+  last_seen_at: string;
 }
 
 interface MemoryHit {
@@ -45,6 +51,21 @@ type MemoryResponse =
   | { mode: 'list'; memories: MemoryRecord[] };
 
 const STATUS_OPTIONS = ['active', 'tentative', 'superseded', 'rejected', 'archived'];
+
+// Mirror of the Pill component's accepted tones (kept local since Pill does
+// not export the type). Matches the per-page statusTone pattern used elsewhere.
+type Tone = 'neutral' | 'amber' | 'cyan' | 'violet' | 'rust' | 'green';
+
+// Color is the fastest scanning channel — give each lifecycle state its own
+// tone so a superseded/rejected fact never looks like a still-trusted one.
+function statusTone(status: string): Tone {
+  if (status === 'active') return 'green';
+  if (status === 'tentative') return 'amber';
+  if (status === 'superseded') return 'violet';
+  if (status === 'rejected') return 'rust';
+  if (status === 'archived') return 'neutral';
+  return 'cyan';
+}
 
 function asMemories(response: MemoryResponse | null | undefined): MemoryHit[] {
   if (!response) return [];
@@ -120,7 +141,8 @@ export function MemoryExplorer(): React.ReactElement {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-1.5">
                   <Pill tone="amber">{memory.type}</Pill>
-                  <Pill tone="cyan">{memory.status}</Pill>
+                  {memory.tier ? <Pill tone="neutral">{memory.tier}</Pill> : null}
+                  <Pill tone={statusTone(memory.status)}>{memory.status}</Pill>
                   <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--text-2)]">
                     {memory.confidence}
                   </span>
@@ -135,8 +157,32 @@ export function MemoryExplorer(): React.ReactElement {
               {memory.body ? (
                 <p className="text-[13px] leading-relaxed text-muted-foreground/70">{memory.body}</p>
               ) : null}
+              {/* Lifecycle lineage: the most decision-relevant metadata. Show what
+                  superseded this fact, what it superseded, and the resolution note,
+                  so a stale fact can be traced to its replacement / rejection reason. */}
+              {memory.superseded_by || memory.supersedes?.length || memory.resolution ? (
+                <div className="grid gap-1 rounded-md border border-border/60 bg-secondary/40 px-2.5 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                  {memory.superseded_by ? (
+                    <span>
+                      Superseded by{' '}
+                      <span className="break-all font-mono text-[10.5px] text-[var(--decision-violet)]">
+                        {memory.superseded_by}
+                      </span>
+                    </span>
+                  ) : null}
+                  {memory.supersedes?.length ? (
+                    <span>
+                      Supersedes{' '}
+                      <span className="break-all font-mono text-[10.5px] text-[var(--text-2)]">
+                        {memory.supersedes.join(', ')}
+                      </span>
+                    </span>
+                  ) : null}
+                  {memory.resolution ? <span>{memory.resolution}</span> : null}
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10.5px] text-[var(--text-2)]">
-                <span>seen {memory.seen_count} · sources {memory.source_count} · updated {memory.updated_at.slice(0, 10)}</span>
+                <span>seen {memory.seen_count} · sources {memory.source_count} · created {memory.created_at.slice(0, 10)} · updated {memory.updated_at.slice(0, 10)}</span>
                 {score !== 1 ? <span>score {score}</span> : null}
                 {matched.length ? <span>matched {matched.join(', ')}</span> : null}
                 {memory.tags.length ? (

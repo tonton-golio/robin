@@ -274,10 +274,14 @@ export function collapseAnnotationEvents<T extends object>(
       return;
     }
 
+    // A timestamp-less later event must NOT override a timestamped status: the
+    // file-order fallback only applies when NEITHER event has a usable timestamp.
+    // Otherwise a malformed (no created/updated/resolved_at) event appended after
+    // a resolved one would resurrect its 'open' status and wipe the sort key.
     const newest =
       !existing.updatedAt ||
-      (updatedAt && updatedAt >= existing.updatedAt) ||
-      (!updatedAt && order > existing.order);
+      (updatedAt !== '' && updatedAt >= existing.updatedAt) ||
+      (!updatedAt && !existing.updatedAt && order > existing.order);
 
     byId.set(id, {
       display: mergeDisplay(existing.display, event),

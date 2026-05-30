@@ -17,6 +17,7 @@ import {
   Database,
   MessageSquare,
   Wrench,
+  Menu,
 } from 'lucide-react';
 import { CommandPalette } from './CommandPalette';
 import { ResyncButton } from './ResyncButton';
@@ -59,6 +60,9 @@ function RailLink({ item, path }: { item: RailItem; path: string }) {
       className="robin-rail-item"
       aria-current={active ? 'page' : undefined}
       title={item.label}
+      // The label span is CSS-hidden when the rail is collapsed, so give the
+      // link an explicit accessible name rather than relying on `title` alone.
+      aria-label={item.label}
     >
       <Icon size={18} strokeWidth={1.5} />
       <span className="robin-rail-item-label">{item.label}</span>
@@ -86,12 +90,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // On mobile the rail is a slide-in overlay, so auto-close it after navigating.
+  // No-op on desktop, where the rail is a persistent column (matchMedia is false).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+      setOpen(false);
+    }
+  }, [path]);
+
   const breadcrumb = appBreadcrumbs(path);
 
   return (
     <WidgetProvider>
     <div className="robin-shell" data-rail={open ? 'open' : 'closed'}>
-      <aside className="robin-rail" aria-label="Primary">
+      <nav className="robin-rail" aria-label="Primary">
         <Link href="/" className="robin-rail-brand" aria-label="Robin home">
           R<span className="robin-rail-brand-name">obin</span>
         </Link>
@@ -109,16 +121,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="robin-rail-item"
             onClick={() => setOpen((v) => !v)}
             title="Toggle rail (⌘\\)"
+            // Label span is CSS-hidden when collapsed; name the toggle for AT.
+            aria-label="Toggle rail"
+            aria-expanded={open}
           >
             <PanelLeft size={18} strokeWidth={1.5} />
             <span className="robin-rail-item-label">Collapse</span>
           </button>
         </div>
-      </aside>
+      </nav>
+
+      {/* Scrim that closes the rail drawer on mobile (CSS-hidden on desktop). */}
+      <button
+        type="button"
+        className="robin-rail-backdrop"
+        aria-label="Close menu"
+        tabIndex={open ? 0 : -1}
+        onClick={() => setOpen(false)}
+      />
 
       <div className="robin-content">
         <header className="robin-topbar">
-          <div className="robin-crumbs">
+          {/* Hamburger opens the rail drawer on mobile (CSS-hidden on desktop). */}
+          <button
+            type="button"
+            className="robin-iconbtn robin-mobile-menu"
+            onClick={() => setOpen(true)}
+            title="Menu"
+            aria-label="Open menu"
+            aria-expanded={open}
+          >
+            <Menu size={16} strokeWidth={1.5} />
+          </button>
+          {/* Breadcrumb trail as a discrete navigation landmark. */}
+          <nav className="robin-crumbs" aria-label="Breadcrumb">
             <Link href="/">robin</Link>
             {breadcrumb.map((seg, i) => {
               const isLast = i === breadcrumb.length - 1;
@@ -135,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               );
             })}
-          </div>
+          </nav>
           <div className="robin-topbar-actions">
             <button
               type="button"

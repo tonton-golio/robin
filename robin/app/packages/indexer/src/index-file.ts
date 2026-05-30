@@ -62,7 +62,7 @@ function firstMeta(val: string | string[] | undefined): string | null {
 }
 
 /** Check whether the pages_vec table exists */
-function hasVecTable(db: Database.Database): boolean {
+export function hasVecTable(db: Database.Database): boolean {
   const row = db
     .prepare(
       `SELECT name FROM sqlite_master WHERE type='table' AND name='pages_vec'`
@@ -115,10 +115,17 @@ export async function indexFile(
 
   const now = new Date().toISOString();
 
-  // Check if we already have this page and whether hash changed
+  // Check if we already have this page and whether hash changed. Read the prior
+  // slug too: indexFile upserts by path, so an in-place robin:slug change (edit,
+  // not delete) updates pages.slug but would otherwise leave the OLD slug's
+  // resolver row + outbound links orphaned forever (nothing else knows the
+  // previous slug). The watcher's unlink path handles old-slug cleanup; this
+  // covers the change-event path it bypasses.
   const existing = db
-    .prepare('SELECT body_hash, rowid FROM pages WHERE path = ?')
-    .get(relPath) as { body_hash: string | null; rowid: number } | undefined;
+    .prepare('SELECT body_hash, slug, rowid FROM pages WHERE path = ?')
+    .get(relPath) as
+    | { body_hash: string | null; slug: string; rowid: number }
+    | undefined;
 
   const hashChanged = !existing || existing.body_hash !== bodyHash;
 
@@ -159,6 +166,14 @@ export async function indexFile(
     indexed_at: now,
   });
 
+  // Clean up the OLD slug when this page's robin:slug changed in place. Links are
+  // keyed by from_path (stable across a same-file slug change) and are replaced by
+  // the delete-by-path below, so only the slug→path resolver needs recomputing
+  // here (clears the stale [[old-slug]] target / de-ambiguates survivors).
+  if (existing && existing.slug !== slug) {
+    recomputeWikilink(db, existing.slug);
+  }
+
   // Recompute the wikilinks resolver entry for this slug from the pages table.
   // The old approach incrementally set a sticky `ambiguous` flag that never
   // cleared once tripped (and a no-op path CASE), so a slug stayed ambiguous
@@ -166,27 +181,35 @@ export async function indexFile(
   // `pages` self-corrects on every index.
   recomputeWikilink(db, slug);
 
-  // Recompute embedding if body changed
-  if (hashChanged && bodyText && hasVecTable(db)) {
+  // Refresh the embedding when the body hash changed. The gate is NOT
+  // `&& bodyText`: when a page that previously had body text is edited to an
+  // empty/whitespace body we must still DELETE the stale vector — otherwise the
+  // old embedding stays aligned to this (still-present) rowid and vector search
+  // keeps matching the page against content it no longer contains, disagreeing
+  // with FTS (which self-clears via the pages_au trigger). Only the INSERT is
+  // gated on non-empty body.
+  if (hashChanged && hasVecTable(db)) {
     try {
       const pageRow = db
         .prepare('SELECT rowid FROM pages WHERE path = ?')
         .get(relPath) as { rowid: number } | undefined;
 
       if (pageRow) {
-        const vec = await embed(bodyText.slice(0, 8192)); // truncate for embedding
-        const vecBuf = serializeEmbedding(vec);
-
         // sqlite-vec requires BigInt for rowid (unlike standard SQLite)
         const rowid = BigInt(pageRow.rowid);
 
-        // Delete old vector if exists
+        // Always drop the old vector first (clears it on an emptied body).
         db.prepare('DELETE FROM pages_vec WHERE rowid = ?').run(rowid);
-        // Insert new vector
-        db.prepare('INSERT INTO pages_vec (rowid, embedding) VALUES (?, ?)').run(
-          rowid,
-          vecBuf
-        );
+
+        if (bodyText) {
+          const vec = await embed(bodyText.slice(0, 8192)); // truncate for embedding
+          const vecBuf = serializeEmbedding(vec);
+          // Insert the new vector
+          db.prepare('INSERT INTO pages_vec (rowid, embedding) VALUES (?, ?)').run(
+            rowid,
+            vecBuf
+          );
+        }
       }
     } catch (err) {
       // Embedding failure is non-fatal
@@ -194,13 +217,15 @@ export async function indexFile(
     }
   }
 
-  // Update links: delete old outbound links from this slug, reinsert
-  db.prepare('DELETE FROM links WHERE from_slug = ?').run(slug);
+  // Update links: delete old outbound links from this PATH, reinsert. Keyed by
+  // from_path (unique) so a hub page's links never collapse with a same-slug
+  // sibling's; from_slug is stored alongside for display + 2-hop expansion.
+  db.prepare('DELETE FROM links WHERE from_path = ?').run(relPath);
   const insertLink = db.prepare(`
-    INSERT OR IGNORE INTO links (from_slug, to_slug, kind) VALUES (?, ?, 'wikilink')
+    INSERT OR IGNORE INTO links (from_path, from_slug, to_slug, kind) VALUES (?, ?, ?, 'wikilink')
   `);
   for (const target of wikilinkTargets) {
-    insertLink.run(slug, target);
+    insertLink.run(relPath, slug, target);
   }
 }
 
@@ -222,8 +247,27 @@ export function recomputeWikilink(db: Database.Database, slug: string): void {
   `).run(slug);
 }
 
+/**
+ * Decode the HTML entities that appear in Robin <title>/text: the named set HTML
+ * requires (&amp; &lt; &gt; &quot; &apos;) plus numeric (&#39; / &#x27;) refs.
+ * Without this the index stores literal "&amp;", which then renders raw in the
+ * command palette, search, vault list, graph labels, etc.
+ */
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_m, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_m, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&'); // last: avoid double-decoding "&amp;lt;"
+}
+
 /** Extract <title> text from raw HTML without a full parse */
 function document_title_from_html(html: string): string | null {
   const m = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  return m ? m[1]!.trim() || null : null;
+  if (!m) return null;
+  const decoded = decodeHtmlEntities(m[1]!).trim();
+  return decoded || null;
 }

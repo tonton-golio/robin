@@ -28,7 +28,7 @@ test.describe('command palette', () => {
   test('typing "/" enters command mode with the COMMAND badge', async ({ page }) => {
     const input = await openPalette(page);
     await input.fill('/');
-    await expect(page.locator(`${PALETTE}[data-mode="command"]`)).toBeVisible();
+    // Command mode is conveyed by the COMMAND badge + the "Commands" group.
     await expect(page.locator('.robin-cmdk-mode-badge')).toHaveText(/command/i);
     // The full command list should render under a "Commands" heading.
     await expect(page.locator(`${PALETTE} .robin-cmdk-group`, { hasText: 'Commands' })).toBeVisible();
@@ -67,7 +67,7 @@ test.describe('command palette', () => {
   test('without a slash, the palette stays in search mode (no command badge)', async ({ page }) => {
     const input = await openPalette(page);
     await input.fill('risk');
-    await expect(page.locator(`${PALETTE}[data-mode="search"]`)).toBeVisible();
+    // Search mode shows page results, never the command badge.
     await expect(page.locator('.robin-cmdk-mode-badge')).toHaveCount(0);
     // No "Commands" group should appear in plain search mode.
     await expect(page.locator(`${PALETTE} .robin-cmdk-group`, { hasText: 'Commands' })).toHaveCount(0);

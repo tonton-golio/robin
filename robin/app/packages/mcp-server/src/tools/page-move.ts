@@ -58,6 +58,20 @@ export async function pageMove(
 
   const newAbsPath = path.join(ctx.vaultPath, newRelPath);
 
+  // Collision guard: fs.rename atomically replaces an existing destination
+  // file, so without this a move onto an occupied path silently destroys the
+  // page already there (no archive, no recovery). Mirror page.create's
+  // collision behavior (-32602 + candidates), while still allowing a no-op /
+  // case-only self-move where source and destination resolve to the same file.
+  if (newAbsPath !== resolved.absolutePath) {
+    const destExists = await fs.access(newAbsPath).then(() => true, () => false);
+    if (destExists) {
+      throw mcpError(-32602, `Destination already exists: ${newRelPath}`, {
+        candidates: [newRelPath],
+      });
+    }
+  }
+
   // Create destination directory if needed
   await fs.mkdir(path.dirname(newAbsPath), { recursive: true });
 

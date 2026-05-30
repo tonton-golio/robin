@@ -55,7 +55,11 @@ async function resolveFreeName(
     try {
       await fs.access(path.join(dir, filename));
       // Exists → try the next suffix.
-    } catch {
+    } catch (err) {
+      // Only ENOENT means "free to use". Any other error (e.g. EACCES) is a real
+      // problem — rethrow it instead of treating it as a free name that would
+      // then collide on the wx write.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       // Does not exist → free to use.
       return { filename, slug: candidateSlug };
     }
@@ -107,12 +111,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Ensure directory exists before probing for collisions.
   await fs.mkdir(meetingsDir, { recursive: true });
 
-  // Resolve a non-colliding filename (appends -2, -3, … if a same-day
-  // same-slug meeting already exists) so we never silently overwrite.
-  const { filename, slug } = await resolveFreeName(meetingsDir, isoDate, baseSlug);
-  const absPath = path.join(meetingsDir, filename);
-  const relPath = path.join('inbox', 'meetings', filename);
-
   // Parse attendees
   const attendeesRaw = typeof body.attendees === 'string' ? body.attendees : '';
   const attendees = attendeesRaw
@@ -136,37 +134,59 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // YAML-safe scalars — the ingest frontmatter parser is line-based.
   const toScalar = (v: unknown): string =>
     typeof v === 'string' ? v.replace(/\s+/g, ' ').replace(/"/g, "'").trim() : '';
-  const title = toScalar(body.title) || slug;
   const summary = toScalar(body.summary);
 
-  // Build frontmatter
-  const frontmatter = [
-    '---',
-    `type: meeting-source`,
-    `date: ${isoDate}`,
-    `title: "${title}"`,
-    summary ? `summary: "${summary}"` : null,
-    attendeesRaw ? `attendees: [${attendees.join(', ')}]` : null,
-    durationStr ? `duration: "${durationStr}"` : null,
-    audioPath ? `audio: ${audioPath}` : null,
-    calendarEventId ? `calendar_event_id: ${calendarEventId}` : null,
-    `updated: ${isoTimestamp}`,
-    '---',
-  ]
-    .filter(line => line !== null)
-    .join('\n');
+  const buildContent = (resolvedSlug: string): string => {
+    const title = toScalar(body.title) || resolvedSlug;
+    const frontmatter = [
+      '---',
+      `type: meeting-source`,
+      `date: ${isoDate}`,
+      `title: "${title}"`,
+      summary ? `summary: "${summary}"` : null,
+      attendeesRaw ? `attendees: [${attendees.join(', ')}]` : null,
+      durationStr ? `duration: "${durationStr}"` : null,
+      audioPath ? `audio: ${audioPath}` : null,
+      calendarEventId ? `calendar_event_id: ${calendarEventId}` : null,
+      `updated: ${isoTimestamp}`,
+      '---',
+    ]
+      .filter(line => line !== null)
+      .join('\n');
+    return `${frontmatter}\n\n${transcript.trim()}\n`;
+  };
 
-  const content = `${frontmatter}\n\n${transcript.trim()}\n`;
+  // Resolve a non-colliding filename and write with flag:'wx' (fail-if-exists)
+  // so we never silently overwrite. The wx write is the real guard for the race
+  // between the access() probe and this write — but a lost race (EEXIST) must be
+  // RETRIED under a fresh suffix, not surfaced as a 500 that drops the transcript.
+  let relPath = '';
+  let slug = '';
+  let wrote = false;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5 && !wrote; attempt++) {
+    const resolved = await resolveFreeName(meetingsDir, isoDate, baseSlug);
+    const absPath = path.join(meetingsDir, resolved.filename);
+    try {
+      await fs.writeFile(absPath, buildContent(resolved.slug), { encoding: 'utf-8', flag: 'wx' });
+      relPath = path.join('inbox', 'meetings', resolved.filename);
+      slug = resolved.slug;
+      wrote = true;
+    } catch (err) {
+      lastErr = err;
+      // A same-second same-slug racing write won the name: re-resolve + retry.
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      // Any other error is fatal.
+      return NextResponse.json(
+        { error: 'Failed to write meeting file', detail: String(err) },
+        { status: 500 },
+      );
+    }
+  }
 
-  // Write the file. `resolveFreeName` already guaranteed `absPath` is free,
-  // so a same-day same-slug meeting lands at <slug>-2.md instead of clobbering
-  // the earlier one. `wx` makes the no-overwrite intent explicit and guards the
-  // tiny race window between the access() probe and this write.
-  try {
-    await fs.writeFile(absPath, content, { encoding: 'utf-8', flag: 'wx' });
-  } catch (err) {
+  if (!wrote) {
     return NextResponse.json(
-      { error: 'Failed to write meeting file', detail: String(err) },
+      { error: 'Failed to write meeting file', detail: String(lastErr) },
       { status: 500 },
     );
   }

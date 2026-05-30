@@ -43,6 +43,9 @@ test.describe('wikilinks', () => {
     await page.goto('/p/brain/risk-register');
     const link = page.locator('a[data-wiki="alex-rivera"]').first();
     const href = await link.getAttribute('href');
-    expect(href).toMatch(/\/p\/.*alex-rivera/);
+    // Wikilinks now resolve to clean vault URLs at render time; the legacy
+    // /p/<slug> form is only a redirect target, no longer baked into hrefs.
+    // Anchored so a regression that left the /p/ prefix in place would FAIL.
+    expect(href).toMatch(/^\/brain\/people\/team\/alex-rivera$/);
   });
 });

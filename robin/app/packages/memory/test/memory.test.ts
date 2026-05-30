@@ -70,6 +70,36 @@ describe('@robin/memory', () => {
     expect(events.events.map((event) => event.event)).toEqual(['memory.saved', 'memory.seen']);
   });
 
+  it('merges concurrent identical saves into one record (serialized read-modify-append)', async () => {
+    // Two same-fingerprint saves fired without awaiting between them. Without
+    // serialization both would read an empty projection and append a distinct
+    // memory.saved, producing two records that should have collapsed into one.
+    const [a, b] = await Promise.all([
+      saveMemory(vault, {
+        type: 'correction',
+        subject: 'Concurrent dedup',
+        summary: 'Two simultaneous saves must merge.',
+        source: { kind: 'annotation', ref: 'race_one' },
+      }),
+      saveMemory(vault, {
+        type: 'correction',
+        subject: 'Concurrent dedup',
+        summary: 'Two simultaneous saves must merge.',
+        source: { kind: 'annotation', ref: 'race_two' },
+      }),
+    ]);
+
+    expect(a.id).toBe(b.id);
+
+    const memories = await listMemories(vault);
+    expect(memories).toHaveLength(1);
+    expect(memories[0]?.seen_count).toBe(2);
+    expect(memories[0]?.source_count).toBe(2);
+
+    const projection = await loadMemoryProjection(vault);
+    expect(projection.events.map((event) => event.event)).toEqual(['memory.saved', 'memory.seen']);
+  });
+
   it('resolves memories without mutating prior events', async () => {
     const saved = await saveMemory(vault, {
       type: 'task',

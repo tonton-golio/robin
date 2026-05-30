@@ -249,7 +249,27 @@ export async function loadMemoryProjection(vaultPath: string): Promise<MemoryPro
   };
 }
 
-export async function saveMemory(vaultPath: string, input: SaveMemoryInput): Promise<MemoryRecord> {
+// Serialize saveMemory within the process. saveMemory is a read-modify-write
+// (load projection → find existing by fingerprint → append event); two
+// concurrent same-fingerprint saves could both observe no existing record and
+// both append `memory.saved`, producing two records that should have collapsed
+// into one with an incremented seen_count. Chaining guarantees a later save
+// observes the earlier save's appended event and takes the merge branch.
+// (Intra-process only; cross-process concurrency would need a lockfile. Mirrors
+// the appendChain pattern in mcp-server html-utils.ts.)
+let saveChain: Promise<unknown> = Promise.resolve();
+
+export function saveMemory(vaultPath: string, input: SaveMemoryInput): Promise<MemoryRecord> {
+  const run = saveChain.then(() => doSaveMemory(vaultPath, input));
+  // Keep the chain alive even if one save rejects.
+  saveChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function doSaveMemory(vaultPath: string, input: SaveMemoryInput): Promise<MemoryRecord> {
   const createdAt = nowIso();
   const scope = normalizeSpace(input.scope ?? 'global') || 'global';
   const summary = normalizeSpace(input.summary);

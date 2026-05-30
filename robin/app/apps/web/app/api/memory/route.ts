@@ -28,6 +28,18 @@ const MEMORY_TYPES = new Set([
   'other',
 ]);
 const MEMORY_CONFIDENCES = new Set(['low', 'medium', 'high']);
+// Mirrors the MCP MemorySourceSchema so both writers to brain/memory/events.jsonl
+// validate `source` the same way. Without this the web route persisted a source
+// with no kind/ref into the durable log.
+const MEMORY_SOURCE_KINDS = new Set([
+  'annotation',
+  'conversation',
+  'meeting',
+  'manual',
+  'tool',
+  'repo',
+  'other',
+]);
 
 function splitParam(value: string | null): string[] | undefined {
   const values = (value ?? '')
@@ -104,7 +116,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (typeof summary !== 'string' || !summary.trim()) {
     return NextResponse.json({ error: 'invalid_summary' }, { status: 400 });
   }
-  if (!source || typeof source !== 'object') {
+  // Validate the source SHAPE (kind enum + non-empty ref), not just that it is an
+  // object — arrays are objects, and `{}` would otherwise persist a kind/ref-less
+  // source into the durable event log.
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return NextResponse.json({ error: 'invalid_source' }, { status: 400 });
+  }
+  const sourceRec = source as Record<string, unknown>;
+  if (typeof sourceRec['kind'] !== 'string' || !MEMORY_SOURCE_KINDS.has(sourceRec['kind'])) {
+    return NextResponse.json({ error: 'invalid_source' }, { status: 400 });
+  }
+  if (typeof sourceRec['ref'] !== 'string' || !sourceRec['ref'].trim()) {
     return NextResponse.json({ error: 'invalid_source' }, { status: 400 });
   }
 

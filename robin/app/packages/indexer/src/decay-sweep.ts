@@ -21,6 +21,26 @@ interface PageSweepRow {
 /** Daily decay factor for the rolling access counter: e^(-1/30) ≈ 0.967 */
 const DAILY_DECAY = Math.exp(-1 / 30);
 
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+/** Meta key storing the last calendar day (YYYY-MM-DD) the rolling decay ran. */
+const DECAY_LAST_SWEPT_KEY = 'decay_last_swept';
+
+/** Local-midnight epoch ms for a given instant — decay counts calendar days. */
+function localMidnightMs(ms: number): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** Local YYYY-MM-DD for a given instant. */
+function localDateKey(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Run a full decay sweep over all pages.
  *
@@ -29,10 +49,23 @@ const DAILY_DECAY = Math.exp(-1 / 30);
  *   2. Apply daily decay to the rolling access counter
  *   3. Persist both back to the DB
  *
+ * Day-idempotent: the access route adds +1 per open and relies on EXACTLY one
+ * decay multiplication per calendar day. But there is no single sweep caller —
+ * each createIndexer schedules its own 03:00 timer, the web process holds two
+ * indexer instances on the same DB (indexer-client + xai-relay), and the CLI /
+ * recomputeStaleness can call it again. So we persist the last-swept date and
+ * exponentiate the decay by the number of elapsed calendar days: re-running on
+ * the same day is a no-op for the rolling counter (factor = DAILY_DECAY**0 = 1),
+ * while a sweep after an N-day gap applies DAILY_DECAY**N. Staleness recompute is
+ * already idempotent (derived from timestamps) so it always runs.
+ *
  * @returns Number of pages updated
  */
 export function runDecaySweep(db: Database.Database, nowMs?: number): number {
   ensureDecayColumns(db);
+  ensureMetaTable(db);
+
+  const now = nowMs ?? Date.now();
 
   const rows = db
     .prepare(
@@ -42,6 +75,12 @@ export function runDecaySweep(db: Database.Database, nowMs?: number): number {
     )
     .all() as PageSweepRow[];
 
+  const readMeta = db.prepare('SELECT value FROM meta WHERE key = ?');
+  const writeMeta = db.prepare(
+    `INSERT INTO meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  );
+
   const update = db.prepare(`
     UPDATE pages
     SET staleness = @staleness,
@@ -50,11 +89,22 @@ export function runDecaySweep(db: Database.Database, nowMs?: number): number {
   `);
 
   const sweep = db.transaction(() => {
+    // Number of calendar days since the last decay (0 ⇒ already swept today).
+    const lastSwept = (readMeta.get(DECAY_LAST_SWEPT_KEY) as { value: string } | undefined)?.value;
+    let days = 1; // first-ever sweep applies one day's decay
+    if (lastSwept) {
+      const lastMs = Date.parse(`${lastSwept}T00:00:00`);
+      if (!Number.isNaN(lastMs)) {
+        days = Math.max(0, Math.floor((localMidnightMs(now) - lastMs) / DAY_MS));
+      }
+    }
+    const factor = days === 0 ? 1 : DAILY_DECAY ** days;
+
     for (const row of rows) {
       const tier = assignTier(row.type, row.tier);
-      const staleness = computeStaleness(tier, row.last_accessed, row.updated, nowMs);
-      // Apply daily decay — no access today means no +1
-      const rolling = (row.access_count_30d_rolling ?? 0) * DAILY_DECAY;
+      const staleness = computeStaleness(tier, row.last_accessed, row.updated, now);
+      // Apply N-day decay — no access on a day means no +1
+      const rolling = (row.access_count_30d_rolling ?? 0) * factor;
 
       update.run({
         path: row.path,
@@ -62,10 +112,22 @@ export function runDecaySweep(db: Database.Database, nowMs?: number): number {
         access_count_30d_rolling: rolling,
       });
     }
+
+    writeMeta.run(DECAY_LAST_SWEPT_KEY, localDateKey(now));
   });
 
   sweep();
   return rows.length;
+}
+
+/**
+ * Ensure the key/value `meta` table exists (idempotent migration). Hosts the
+ * decay last-swept date; created here so a DB that predates it self-upgrades.
+ */
+export function ensureMetaTable(db: Database.Database): void {
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)`
+  );
 }
 
 /**
