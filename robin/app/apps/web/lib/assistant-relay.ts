@@ -152,6 +152,7 @@ export async function* streamAssistantEvents(options: StreamOptions): AsyncGener
     options.text,
     '--output-format',
     'stream-json',
+    '--verbose',
     '--append-system-prompt',
     systemPrompt(options.mode),
   ];
