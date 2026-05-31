@@ -2,7 +2,7 @@
   "name": "@robin/web",
   "version": "0.0.1",
   "private": true,
-  "description": "Read-only Next.js web app for the Robin brain.",
+  "description": "Local web UI for the Robin second brain.",
   "scripts": {
     "dev": "next dev -p 8400",
     "build": "next build",

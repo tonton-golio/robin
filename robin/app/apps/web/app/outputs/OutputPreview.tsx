@@ -10,8 +10,23 @@ import { vaultApiFileHref } from '@/lib/routes';
 const DESIGN_W = 1200;
 const DESIGN_H = (DESIGN_W * 10) / 16; // 750
 
+// Seek the poster a touch past the start so fade-ins don't render as a black
+// frame (the launch-video clips open on a fade).
+const POSTER_TIME = 0.5;
+
 function fileUrlFor(path: string): string {
   return vaultApiFileHref(path);
+}
+
+function PlayBadge(): React.ReactElement {
+  return (
+    <span className="output-tile-play" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.45)" />
+        <path d="M9.5 7.5 16.5 12 9.5 16.5Z" fill="#fff" />
+      </svg>
+    </span>
+  );
 }
 
 export function OutputPreview({ path }: { path: string }): React.ReactElement {
@@ -20,11 +35,16 @@ export function OutputPreview({ path }: { path: string }): React.ReactElement {
   // the ResizeObserver corrects it to the exact width.
   const [scale, setScale] = useState(280 / DESIGN_W);
   const [failed, setFailed] = useState(false);
+  // Defer loading video metadata until the tile nears the viewport — an outputs
+  // page can hold dozens of clips, and each <video> otherwise fires a network
+  // request on mount.
+  const [inView, setInView] = useState(false);
 
   const lower = path.toLowerCase();
   const isImage = /\.(png|jpe?g|gif|webp|avif)$/.test(lower);
   const isHtml = lower.endsWith('.html');
   const isPdf = lower.endsWith('.pdf');
+  const isVideo = /\.(mp4|m4v|mov|ogv)$/.test(lower);
 
   useEffect(() => {
     const el = ref.current;
@@ -38,11 +58,47 @@ export function OutputPreview({ path }: { path: string }): React.ReactElement {
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!isVideo) return;
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [isVideo]);
+
   if (isImage) {
     return (
       <div ref={ref} className="output-tile-thumb output-tile-thumb--media">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={fileUrlFor(path)} alt="" loading="lazy" />
+      </div>
+    );
+  }
+
+  if (isVideo && !failed) {
+    return (
+      <div ref={ref} className="output-tile-thumb output-tile-thumb--video">
+        {inView ? (
+          <video
+            src={`${fileUrlFor(path)}#t=${POSTER_TIME}`}
+            preload="metadata"
+            muted
+            playsInline
+            tabIndex={-1}
+            aria-hidden
+            onError={() => setFailed(true)}
+          />
+        ) : null}
+        <PlayBadge />
       </div>
     );
   }

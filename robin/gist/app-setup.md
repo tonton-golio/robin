@@ -59,7 +59,7 @@ The keys in `.env.example`, and what to set:
 | `ASSISTANT_MODE` | Optional | `claude` to use the Claude CLI for the in-app assistant; `stub` for deterministic local responses without it. |
 | `ASSISTANT_CLAUDE_CWD` | Optional | Working directory the in-app assistant runs Claude from — set to your **repo root** (not the vault), so the agent sees `CLAUDE.md` and `.claude/`. |
 | `ASSISTANT_SESSION_FILE` | Optional | Where the assistant persists its session (under `<vault>/.robin/`). |
-| `ROBIN_XAI_MODE` / `XAI_API_KEY` / `INTERVIEW_*` | Optional | The interview voice relay (xAI Realtime). Leave `stub` / blank unless you use it. |
+| `ROBIN_XAI_MODE` / `XAI_API_KEY` / `INTERVIEW_*` | Optional | The voice interview (xAI Realtime). **To actually use it, set `ROBIN_XAI_MODE=real` *and* a real `XAI_API_KEY`** (from [console.x.ai](https://console.x.ai)); leave `stub` / blank for scripted offline frames. `INTERVIEW_SESSION_SECRET` / `INTERVIEW_ALLOWED_ORIGINS` are only for multi-process or non-localhost deployments — blank is correct for the normal local app. |
 | `ROBIN_WHISPER_MODE` / `OPENAI_API_KEY` | Optional | Meeting transcription fallback (`stub` fixtures, `local` whisper-node, or `openai`). |
 | `DEEPGRAM_API_KEY` | Optional | Live meeting transcription via Deepgram (the recorder's default STT). |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | Optional | Meeting AI processing (titles, summaries, action items). Default model `anthropic/claude-sonnet-4.5`. |

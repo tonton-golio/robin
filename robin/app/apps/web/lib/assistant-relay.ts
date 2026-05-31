@@ -17,9 +17,9 @@ export type AssistantEvent =
   | { type: 'error'; message: string };
 
 const VOICE_PROMPT =
-  `You are ${OWNER_POSS} AI chief of staff inside Robin, a local-first personal brain. ` +
-  'Answer from the Robin vault and available tools first. Be direct, concise, and practical. ' +
-  `When you use tools, keep the final answer focused on what ${OWNER} should know or do next.`;
+  `You are ${OWNER_POSS} AI chief of staff inside Robin — ${OWNER_POSS} local second brain. ` +
+  'Answer from the vault first. Be direct, concise, practical. ' +
+  `Keep the final answer focused on what ${OWNER} should know or do next.`;
 
 const TALK_PROMPT =
   `You are interviewing ${OWNER} to extract ${OWNER_POSS} thinking on a specific topic. ` +

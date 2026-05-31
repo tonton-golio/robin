@@ -1,6 +1,6 @@
 # Robin UI
 
-Local-first browser UI, renderer, indexer, and MCP implementation for Robin. Runs on `localhost:8400`. Reads/writes brain files in the vault at `./base` (set `ROBIN_VAULT` to point elsewhere) and maintains a sidecar SQLite index at `<vault>/.robin/index.db`.
+Local web UI + indexer + MCP server for Robin, your local second brain. Runs on `localhost:8400`. Plain HTML files in the vault. Sidecar SQLite index at `<vault>/.robin/index.db`.
 
 Single user. No deployment. No auth.
 

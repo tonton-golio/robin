@@ -17,8 +17,8 @@ export default async function AboutPage() {
     <article className="about-page">
       <h1>About Robin</h1>
       <p className="lede">
-        Robin is {ownerPoss} second brain — a continuously growing, self-cleaning
-        knowledge base with a browser interface for deep dives.
+        Robin is {ownerPoss} local second brain — plain files, self-cleaning, built
+        for the agent to live in.
       </p>
 
       <p>

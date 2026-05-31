@@ -31,6 +31,10 @@ function isPdf(relPath: string): boolean {
   return path.extname(relPath).toLowerCase() === '.pdf';
 }
 
+function isVideo(relPath: string): boolean {
+  return ['.mp4', '.m4v', '.mov', '.ogv'].includes(path.extname(relPath).toLowerCase());
+}
+
 export default async function FilePage({ params }: FilePageProps): Promise<React.ReactElement> {
   const { path: segments } = await params;
   const relPath = normalizeVaultFilePath(segments);
@@ -93,6 +97,19 @@ export default async function FilePage({ params }: FilePageProps): Promise<React
             src={contentUrl}
             title={path.basename(relPath)}
           />
+        </Card>
+      ) : isVideo(relPath) ? (
+        <Card className="grid place-items-center bg-black p-2">
+          {/* biome-ignore lint/a11y/useMediaCaption: vault video artifacts ship no caption track */}
+          <video
+            controls
+            preload="metadata"
+            playsInline
+            src={contentUrl}
+            className="max-h-[calc(100vh-220px)] max-w-full rounded-md"
+          >
+            <track kind="captions" />
+          </video>
         </Card>
       ) : (
         <EmptyState title={`No inline preview for ${ext || contentType}.`} hint="Use Open to view the file directly." />

@@ -26,13 +26,25 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 /** How long a minted token stays valid. Long enough to allow a reconnect. */
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 
-let _secret: Buffer | null = null;
+// The mint route (App Router) and the relay's verify path (booted from
+// instrumentation.ts) run in the SAME Node process but, under Next.js, in
+// SEPARATE module graphs — a plain module-level secret is instantiated once per
+// graph, so mint and verify would derive DIFFERENT random secrets and every
+// token would fail `bad_signature`. The relay then closes the socket with 4401
+// and the browser reconnect-loops ("Reconnecting…" forever). Stash the secret
+// on globalThis so both module instances — and dev hot-reloads — resolve the
+// SAME key, mirroring the relay's __robinVoiceRelay__ / __robinVoiceSessions__
+// singletons. A pinned INTERVIEW_SESSION_SECRET still takes precedence.
+const SECRET_KEY = "__robinInterviewSessionSecret__";
 
 function getSecret(): Buffer {
-  if (_secret) return _secret;
+  const g = globalThis as unknown as Record<string, Buffer | undefined>;
+  const existing = g[SECRET_KEY];
+  if (existing) return existing;
   const pinned = process.env["INTERVIEW_SESSION_SECRET"]?.trim();
-  _secret = pinned ? Buffer.from(pinned, "utf-8") : randomBytes(32);
-  return _secret;
+  const secret = pinned ? Buffer.from(pinned, "utf-8") : randomBytes(32);
+  g[SECRET_KEY] = secret;
+  return secret;
 }
 
 function base64url(buf: Buffer): string {

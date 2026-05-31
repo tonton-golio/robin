@@ -146,8 +146,13 @@ export function InterviewWidget() {
     </div>
   );
 
+  // h-full (not just flex-1) so the transcript fills a bounded height in BOTH
+  // layouts: in the big layout its parent is a flex row (stretch gives height),
+  // but in the small layout its parent is a plain block where flex-1 is inert —
+  // without an explicit height the inner overflow-y-auto never bounds, so the
+  // conversation just grows and gets clipped instead of scrolling to the latest.
   const transcript = (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <span className="mb-1.5 block text-[10px] uppercase tracking-widest text-[var(--text-2)]">
         Transcript
       </span>

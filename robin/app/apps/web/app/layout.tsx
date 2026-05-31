@@ -4,7 +4,7 @@ import { AppShell } from '@/components/shell/AppShell';
 
 export const metadata: Metadata = {
   title: 'Robin',
-  description: 'Local-first agent assistant',
+  description: 'Your local second brain.',
 };
 
 export default function RootLayout({

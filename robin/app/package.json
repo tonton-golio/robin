@@ -2,7 +2,7 @@
   "name": "robin",
   "version": "0.0.0",
   "private": true,
-  "description": "Local-first HTML-backed personal brain web app",
+  "description": "Your local second brain — plain files the agent actually uses.",
   "workspaces": [
     "packages/*",
     "apps/*"

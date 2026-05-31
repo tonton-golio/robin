@@ -148,7 +148,17 @@ export function contentTypeForPath(relPath: string): string {
     case '.jpg':
     case '.jpeg':
       return 'image/jpeg';
+    case '.mp4':
+      return 'video/mp4';
+    case '.m4v':
+      return 'video/x-m4v';
+    case '.mov':
+      return 'video/quicktime';
+    case '.ogv':
+      return 'video/ogg';
     case '.webm':
+      // Raw meeting/voice recordings are blocked from being SERVED entirely
+      // (SENSITIVE_EXTENSIONS). This content-type only applies to internal reads.
       return 'audio/webm';
     case '.mp3':
       return 'audio/mpeg';
