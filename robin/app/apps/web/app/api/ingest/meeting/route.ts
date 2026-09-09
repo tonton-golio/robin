@@ -6,14 +6,25 @@
  * file, emits a canonical meeting HTML page, and records the ingest event.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
-import { vaultPageHref } from '@/lib/routes';
-import { locateVault } from '@/lib/vault';
+import { NextRequest, NextResponse } from "next/server";
+import fs from "fs/promises";
+import path from "path";
+import crypto from "node:crypto";
+import { parseRobinHtmlCore } from "@robin/converter";
+import {
+  durableReplace,
+  VaultConflictError,
+  withVaultLocks,
+  writeWithHistory,
+} from "@robin/vault-io";
+import { vaultPageHref } from "@/lib/routes";
+import { locateVault } from "@/lib/vault";
+import { compileMeetingSignals } from "@/lib/meeting-compiler";
+import { coerceMeetingSignals, decodeMeetingSignals } from "@/lib/meeting-signals";
+import { refreshIndexPaths } from "@/lib/indexer-client";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type MeetingFrontmatter = {
   title?: string;
@@ -21,11 +32,13 @@ type MeetingFrontmatter = {
   attendees?: string[];
   duration?: string;
   summary?: string;
+  meetingId?: string;
+  payloadHash?: string;
+  signals?: string;
+  updated?: string;
 };
 
-const MEETING_SOURCE_PREFIXES = [
-  `inbox${path.sep}meetings${path.sep}`,
-];
+const MEETING_SOURCE_PREFIXES = [`inbox${path.sep}meetings${path.sep}`];
 
 function jsonResponse(body: Record<string, unknown>, status = 200): NextResponse {
   return NextResponse.json(body, { status });
@@ -33,34 +46,34 @@ function jsonResponse(body: Record<string, unknown>, status = 200): NextResponse
 
 async function getRequestPath(request: NextRequest): Promise<string | null> {
   const { searchParams } = new URL(request.url);
-  const queryPath = searchParams.get('path');
+  const queryPath = searchParams.get("path");
   if (queryPath) {
     return queryPath;
   }
 
-  if (request.method !== 'POST') {
+  if (request.method !== "POST") {
     return null;
   }
 
   try {
-    const body = await request.json() as { path?: unknown };
-    return typeof body.path === 'string' ? body.path : null;
+    const body = (await request.json()) as { path?: unknown };
+    return typeof body.path === "string" ? body.path : null;
   } catch {
     return null;
   }
 }
 
 function safeMeetingSourcePath(sourcePath: string): string | null {
-  if (!sourcePath.trim() || path.isAbsolute(sourcePath) || sourcePath.includes('\0')) {
+  if (!sourcePath.trim() || path.isAbsolute(sourcePath) || sourcePath.includes("\0")) {
     return null;
   }
 
-  const normalized = path.normalize(sourcePath).replace(/^\.\/+/, '');
+  const normalized = path.normalize(sourcePath).replace(/^\.\/+/, "");
   if (
-    normalized === '..' ||
+    normalized === ".." ||
     normalized.startsWith(`..${path.sep}`) ||
-    !MEETING_SOURCE_PREFIXES.some(prefix => normalized.startsWith(prefix)) ||
-    path.extname(normalized) !== '.md'
+    !MEETING_SOURCE_PREFIXES.some((prefix) => normalized.startsWith(prefix)) ||
+    path.extname(normalized) !== ".md"
   ) {
     return null;
   }
@@ -71,23 +84,23 @@ function safeMeetingSourcePath(sourcePath: string): string | null {
 function slugify(text: string): string {
   return text
     .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
     .slice(0, 96);
 }
 
 function stripWrappingQuotes(value: string): string {
-  return value.replace(/^["']|["']$/g, '');
+  return value.replace(/^["']|["']$/g, "");
 }
 
 function parseFrontmatter(markdown: string): { frontmatter: MeetingFrontmatter; body: string } {
-  if (!markdown.startsWith('---\n')) {
+  if (!markdown.startsWith("---\n")) {
     return { frontmatter: {}, body: markdown.trim() };
   }
 
-  const end = markdown.indexOf('\n---', 4);
+  const end = markdown.indexOf("\n---", 4);
   if (end === -1) {
     return { frontmatter: {}, body: markdown.trim() };
   }
@@ -96,8 +109,8 @@ function parseFrontmatter(markdown: string): { frontmatter: MeetingFrontmatter; 
   const body = markdown.slice(end + 4).trim();
   const frontmatter: MeetingFrontmatter = {};
 
-  for (const line of frontmatterRaw.split('\n')) {
-    const separator = line.indexOf(':');
+  for (const line of frontmatterRaw.split("\n")) {
+    const separator = line.indexOf(":");
     if (separator === -1) {
       continue;
     }
@@ -105,19 +118,27 @@ function parseFrontmatter(markdown: string): { frontmatter: MeetingFrontmatter; 
     const key = line.slice(0, separator).trim();
     const value = stripWrappingQuotes(line.slice(separator + 1).trim());
 
-    if (key === 'title') {
+    if (key === "title") {
       frontmatter.title = value;
-    } else if (key === 'date') {
+    } else if (key === "date") {
       frontmatter.date = value;
-    } else if (key === 'duration') {
+    } else if (key === "duration") {
       frontmatter.duration = value;
-    } else if (key === 'summary') {
+    } else if (key === "summary") {
       frontmatter.summary = value;
-    } else if (key === 'attendees') {
+    } else if (key === "meeting_id") {
+      frontmatter.meetingId = value;
+    } else if (key === "payload_hash") {
+      frontmatter.payloadHash = value;
+    } else if (key === "robin_signals") {
+      frontmatter.signals = value;
+    } else if (key === "updated") {
+      frontmatter.updated = value;
+    } else if (key === "attendees") {
       frontmatter.attendees = value
-        .replace(/^\[|\]$/g, '')
-        .split(',')
-        .map(attendee => stripWrappingQuotes(attendee.trim()))
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((attendee) => stripWrappingQuotes(attendee.trim()))
         .filter(Boolean);
     }
   }
@@ -127,10 +148,10 @@ function parseFrontmatter(markdown: string): { frontmatter: MeetingFrontmatter; 
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 // ── Markdown-lite body → RobinBlock[] ──────────────────────────────────────
@@ -139,15 +160,13 @@ function escapeHtml(value: string): string {
 // (task list) sections. We parse those into real blocks so the brain page
 // renders proper headings / lists rather than literal markdown.
 
-type Inline =
-  | { kind: 'text'; text: string; marks?: string[] }
-  | { kind: 'lineBreak' };
+type Inline = { kind: "text"; text: string; marks?: string[] } | { kind: "lineBreak" };
 
 type Block =
-  | { kind: 'heading'; level: number; content: Inline[] }
-  | { kind: 'paragraph'; content: Inline[] }
-  | { kind: 'bulletList'; items: Block[][] }
-  | { kind: 'taskList'; items: Array<{ checked: boolean; content: Inline[] }> };
+  | { kind: "heading"; level: number; content: Inline[] }
+  | { kind: "paragraph"; content: Inline[] }
+  | { kind: "bulletList"; items: Block[][] }
+  | { kind: "taskList"; items: Array<{ checked: boolean; content: Inline[] }> };
 
 function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
@@ -155,18 +174,18 @@ function parseInline(text: string): Inline[] {
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
-    if (m.index > last) out.push({ kind: 'text', text: text.slice(last, m.index) });
-    out.push({ kind: 'text', text: m[1]!, marks: ['bold'] });
+    if (m.index > last) out.push({ kind: "text", text: text.slice(last, m.index) });
+    out.push({ kind: "text", text: m[1]!, marks: ["bold"] });
     last = re.lastIndex;
   }
-  if (last < text.length) out.push({ kind: 'text', text: text.slice(last) });
-  return out.length ? out : [{ kind: 'text', text }];
+  if (last < text.length) out.push({ kind: "text", text: text.slice(last) });
+  return out.length ? out : [{ kind: "text", text }];
 }
 
 function paragraphInlines(chunk: string): Inline[] {
   const inlines: Inline[] = [];
-  chunk.split('\n').forEach((line, i) => {
-    if (i > 0) inlines.push({ kind: 'lineBreak' });
+  chunk.split("\n").forEach((line, i) => {
+    if (i > 0) inlines.push({ kind: "lineBreak" });
     inlines.push(...parseInline(line));
   });
   return inlines;
@@ -174,79 +193,84 @@ function paragraphInlines(chunk: string): Inline[] {
 
 function classifyChunk(chunk: string): Block {
   const trimmed = chunk.trim();
-  const lines = trimmed.split('\n');
+  const lines = trimmed.split("\n");
 
   const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
   if (lines.length === 1 && heading) {
-    return { kind: 'heading', level: Math.min(6, heading[1]!.length), content: parseInline(heading[2]!) };
+    return {
+      kind: "heading",
+      level: Math.min(6, heading[1]!.length),
+      content: parseInline(heading[2]!),
+    };
   }
 
-  if (lines.every(l => /^- \[[ xX]\]\s+/.test(l.trim()))) {
+  if (lines.every((l) => /^- \[[ xX]\]\s+/.test(l.trim()))) {
     return {
-      kind: 'taskList',
-      items: lines.map(l => {
+      kind: "taskList",
+      items: lines.map((l) => {
         const m = /^- \[([ xX])\]\s+(.*)$/.exec(l.trim())!;
-        return { checked: m[1]!.toLowerCase() === 'x', content: parseInline(m[2]!) };
+        return { checked: m[1]!.toLowerCase() === "x", content: parseInline(m[2]!) };
       }),
     };
   }
 
-  if (lines.every(l => /^[-*]\s+/.test(l.trim()))) {
+  if (lines.every((l) => /^[-*]\s+/.test(l.trim()))) {
     return {
-      kind: 'bulletList',
-      items: lines.map(l => {
+      kind: "bulletList",
+      items: lines.map((l) => {
         const m = /^[-*]\s+(.*)$/.exec(l.trim())!;
-        return [{ kind: 'paragraph', content: parseInline(m[1]!) } as Block];
+        return [{ kind: "paragraph", content: parseInline(m[1]!) } as Block];
       }),
     };
   }
 
-  return { kind: 'paragraph', content: paragraphInlines(trimmed) };
+  return { kind: "paragraph", content: paragraphInlines(trimmed) };
 }
 
 function parseBodyToBlocks(body: string): Block[] {
   return body
     .split(/\n{2,}/)
-    .map(chunk => chunk.trim())
+    .map((chunk) => chunk.trim())
     .filter(Boolean)
     .map(classifyChunk);
 }
 
 function renderInlineHtml(inlines: Inline[]): string {
   return inlines
-    .map(inline => {
-      if (inline.kind === 'lineBreak') return '<br>';
+    .map((inline) => {
+      if (inline.kind === "lineBreak") return "<br>";
       const text = escapeHtml(inline.text);
-      return inline.marks?.includes('bold') ? `<strong>${text}</strong>` : text;
+      return inline.marks?.includes("bold") ? `<strong>${text}</strong>` : text;
     })
-    .join('');
+    .join("");
 }
 
 function renderBlockHtml(block: Block): string {
   switch (block.kind) {
-    case 'heading':
+    case "heading":
       return `    <h${block.level} data-block="heading">${renderInlineHtml(block.content)}</h${block.level}>`;
-    case 'paragraph':
+    case "paragraph":
       return `    <p data-block="paragraph">${renderInlineHtml(block.content)}</p>`;
-    case 'bulletList':
+    case "bulletList":
       return [
         '    <ul data-block="bulletList">',
-        ...block.items.map(item => {
+        ...block.items.map((item) => {
           const inner = item
-            .map(b => (b.kind === 'paragraph' ? renderInlineHtml(b.content) : ''))
-            .join('');
+            .map((b) => (b.kind === "paragraph" ? renderInlineHtml(b.content) : ""))
+            .join("");
           return `      <li data-block="listItem">${inner}</li>`;
         }),
-        '    </ul>',
-      ].join('\n');
-    case 'taskList':
+        "    </ul>",
+      ].join("\n");
+    case "taskList":
       return [
         '    <ul data-block="taskList">',
         ...block.items.map(
-          item => `      <li data-block="task" data-checked="${item.checked}">${renderInlineHtml(item.content)}</li>`,
+          (item) =>
+            `      <li data-block="task" data-checked="${item.checked}">${renderInlineHtml(item.content)}</li>`,
         ),
-        '    </ul>',
-      ].join('\n');
+        "    </ul>",
+      ].join("\n");
   }
 }
 
@@ -260,6 +284,8 @@ function buildMeetingHtml(input: {
   duration?: string;
   transcript: string;
   summary?: string;
+  meetingId: string;
+  sourceRevision: string;
   updated: string;
 }): string {
   const summary =
@@ -267,32 +293,35 @@ function buildMeetingHtml(input: {
       ? input.summary.trim()
       : `Transcript ingested from ${input.sourcePath}.`;
   const metaLine = [
-    input.attendees.length ? `Attendees: ${input.attendees.join(', ')}` : null,
+    input.attendees.length ? `Attendees: ${input.attendees.join(", ")}` : null,
     input.duration ? `Duration: ${input.duration}` : null,
     `Source: ${input.sourcePath}`,
   ]
     .filter(Boolean)
-    .join('. ');
+    .join(". ");
 
   // Parse the saved body (transcript, optionally with AI Summary / Key points /
   // Action items sections). If the body carries no headings of its own, wrap it
   // under a "Transcript" heading for backward compatibility with plain saves.
   const bodyBlocks = parseBodyToBlocks(input.transcript);
-  const hasHeading = bodyBlocks.some(b => b.kind === 'heading');
+  const hasHeading = bodyBlocks.some((b) => b.kind === "heading");
   const contentBlocks: Block[] = hasHeading
     ? bodyBlocks
-    : [{ kind: 'heading', level: 2, content: [{ kind: 'text', text: 'Transcript' }] }, ...bodyBlocks];
+    : [
+        { kind: "heading", level: 2, content: [{ kind: "text", text: "Transcript" }] },
+        ...bodyBlocks,
+      ];
 
   // v0.2: blocks are an in-memory intermediate. We render the <article> body
   // directly and do not embed the full block tree as a JSON payload anymore.
 
   const attendeeMeta = input.attendees
-    .map(attendee => `  <meta name="robin:attendee" content="${escapeHtml(attendee)}">`)
-    .join('\n');
+    .map((attendee) => `  <meta name="robin:attendee" content="${escapeHtml(attendee)}">`)
+    .join("\n");
   const durationMeta = input.duration
     ? `  <meta name="robin:duration" content="${escapeHtml(input.duration)}">\n`
-    : '';
-  const bodyHtml = contentBlocks.map(renderBlockHtml).join('\n');
+    : "";
+  const bodyHtml = contentBlocks.map(renderBlockHtml).join("\n");
 
   return `<!doctype html>
 <html lang="en">
@@ -301,10 +330,12 @@ function buildMeetingHtml(input: {
   <title>${escapeHtml(input.title)}</title>
   <link rel="canonical" href="${vaultPageHref(input.outputPath)}">
   <meta name="robin:version" content="0.2">
-${attendeeMeta ? `${attendeeMeta}\n` : ''}  <meta name="robin:date" content="${escapeHtml(input.date)}">
+${attendeeMeta ? `${attendeeMeta}\n` : ""}  <meta name="robin:date" content="${escapeHtml(input.date)}">
 ${durationMeta}  <meta name="robin:path" content="${escapeHtml(input.outputPath)}">
   <meta name="robin:slug" content="${escapeHtml(input.slug)}">
+  <meta name="robin:meeting-id" content="${escapeHtml(input.meetingId)}">
   <meta name="robin:source" content="${escapeHtml(input.sourcePath)}">
+  <meta name="robin:source-revision" content="${escapeHtml(input.sourceRevision)}">
   <meta name="robin:state" content="stable">
   <meta name="robin:summary" content="${escapeHtml(summary)}">
   <meta name="robin:type" content="meeting">
@@ -329,52 +360,98 @@ async function prependOrReplaceIngestLog(input: {
   attendees: string[];
   updated: string;
 }): Promise<void> {
-  const logPath = path.join(/*turbopackIgnore: true*/ input.vault, 'logs', 'ingest-log.md');
-  const current = await fs.readFile(logPath, 'utf-8').catch(() => '# Ingest Log\n');
-  const entry = [
-    `## ${input.updated} — meeting — ${input.slug}`,
-    '',
-    `- **source**: \`${input.sourcePath}\``,
-    `- **output**: \`${input.outputPath}\``,
-    input.attendees.length ? `- **attendees**: ${input.attendees.join(', ')}` : null,
-    '- **status**: ingested locally',
-    '',
-  ]
-    .filter(line => line !== null)
-    .join('\n');
+  const relativePath = "logs/ingest-log.md";
+  return withVaultLocks(input.vault, [`view:${relativePath}`], async () => {
+    const logPath = path.join(/*turbopackIgnore: true*/ input.vault, ...relativePath.split("/"));
+    const current = await fs.readFile(logPath, "utf-8").catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return "# Ingest Log\n";
+      throw error;
+    });
+    const entry = [
+      `## ${input.updated} — meeting — ${input.slug}`,
+      "",
+      `- **source**: \`${input.sourcePath}\``,
+      `- **output**: \`${input.outputPath}\``,
+      input.attendees.length ? `- **attendees**: ${input.attendees.join(", ")}` : null,
+      "- **status**: compiled locally",
+      "",
+    ]
+      .filter((line) => line !== null)
+      .join("\n");
 
-  const escapedSource = input.sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const existingEntry = new RegExp(
-    `\\n?## [^\\n]+ — meeting — [^\\n]+\\n\\n- \\*\\*source\\*\\*: \`${escapedSource}\`[\\s\\S]*?(?=\\n## |$)`,
-  );
-  const withoutExisting = current.replace(existingEntry, '').trimEnd();
-  const heading = '# Ingest Log';
-  const headingIndex = withoutExisting.indexOf(heading);
-  const next =
-    headingIndex >= 0
-      ? `${withoutExisting.slice(0, headingIndex + heading.length)}\n\n${entry}${withoutExisting
-          .slice(headingIndex + heading.length)
-          .trimStart()}`
-      : `${withoutExisting ? `${withoutExisting}\n\n` : ''}${heading}\n\n${entry}`;
-  const tmp = `${logPath}.tmp-${process.pid}-${Date.now()}`;
+    const escapedSource = input.sourcePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const existingEntry = new RegExp(
+      `\\n?## [^\\n]+ — meeting — [^\\n]+\\n\\n- \\*\\*source\\*\\*: \`${escapedSource}\`[\\s\\S]*?(?=\\n## |$)`,
+    );
+    const withoutExisting = current.replace(existingEntry, "").trimEnd();
+    const heading = "# Ingest Log";
+    const headingIndex = withoutExisting.indexOf(heading);
+    const next =
+      headingIndex >= 0
+        ? `${withoutExisting.slice(0, headingIndex + heading.length)}\n\n${entry}${withoutExisting
+            .slice(headingIndex + heading.length)
+            .trimStart()}`
+        : `${withoutExisting ? `${withoutExisting}\n\n` : ""}${heading}\n\n${entry}`;
+    await durableReplace(logPath, next);
+  });
+}
 
-  await fs.mkdir(path.dirname(logPath), { recursive: true });
-  await fs.writeFile(tmp, next, 'utf-8');
-  await fs.rename(tmp, logPath);
+async function prependOrReplaceChangelog(input: {
+  vault: string;
+  sourcePath: string;
+  title: string;
+  date: string;
+  decisions: number;
+  commitments: number;
+  interventions: number;
+}): Promise<void> {
+  const relativePath = "logs/changelog.md";
+  return withVaultLocks(input.vault, [`view:${relativePath}`], async () => {
+    const logPath = path.join(/*turbopackIgnore: true*/ input.vault, ...relativePath.split("/"));
+    const current = await fs.readFile(logPath, "utf8").catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return "# Changelog\n";
+      throw error;
+    });
+    const marker = `<!-- robin:meeting-source ${input.sourcePath} -->`;
+    const entry = [
+      `## [${input.date}] meeting | compiled ${input.title}`,
+      "",
+      `- ${input.decisions} decision${input.decisions === 1 ? "" : "s"}, ${input.commitments} commitment${input.commitments === 1 ? "" : "s"}, ${input.interventions} item${input.interventions === 1 ? "" : "s"} need judgment.`,
+      `- Source: \`${input.sourcePath}\``,
+      marker,
+      "",
+    ].join("\n");
+    const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const existingEntry = new RegExp(
+      `\\n?## \\[[^\\]]+\\] meeting \\|[^\\n]+[\\s\\S]*?${escapedMarker}\\n?`,
+      "m",
+    );
+    const withoutExisting = current.replace(existingEntry, "").trimEnd();
+    const heading = "# Changelog";
+    const headingIndex = withoutExisting.indexOf(heading);
+    const next =
+      headingIndex >= 0
+        ? `${withoutExisting.slice(0, headingIndex + heading.length)}\n\n${entry}${withoutExisting.slice(headingIndex + heading.length).trimStart()}`
+        : `${heading}\n\n${entry}${withoutExisting}`;
+    await durableReplace(logPath, next);
+  });
 }
 
 async function handler(request: NextRequest): Promise<NextResponse> {
   const requestedPath = await getRequestPath(request);
   if (!requestedPath) {
-    return jsonResponse({ error: 'missing_path', message: 'Provide a vault-relative inbox meeting markdown path.' }, 400);
+    return jsonResponse(
+      { error: "missing_path", message: "Provide a vault-relative inbox meeting markdown path." },
+      400,
+    );
   }
 
   const sourcePath = safeMeetingSourcePath(requestedPath);
   if (!sourcePath) {
     return jsonResponse(
       {
-        error: 'unsafe_path',
-        message: 'Path must be a vault-relative inbox/meetings/*.md file.',
+        error: "unsafe_path",
+        message: "Path must be a vault-relative inbox/meetings/*.md file.",
         path: requestedPath,
       },
       400,
@@ -386,31 +463,46 @@ async function handler(request: NextRequest): Promise<NextResponse> {
   const resolvedVault = path.resolve(/*turbopackIgnore: true*/ vault);
   const resolvedSource = path.resolve(/*turbopackIgnore: true*/ sourceAbs);
   if (!resolvedSource.startsWith(`${resolvedVault}${path.sep}`)) {
-    return jsonResponse({ error: 'unsafe_path', path: requestedPath }, 400);
+    return jsonResponse({ error: "unsafe_path", path: requestedPath }, 400);
   }
 
   let rawMarkdown: string;
   try {
-    rawMarkdown = await fs.readFile(resolvedSource, 'utf-8');
+    rawMarkdown = await fs.readFile(resolvedSource, "utf-8");
   } catch {
-    return jsonResponse({ error: 'not_found', path: sourcePath }, 404);
+    return jsonResponse({ error: "not_found", path: sourcePath }, 404);
   }
 
   const { frontmatter, body } = parseFrontmatter(rawMarkdown);
   if (!body.trim()) {
-    return jsonResponse({ error: 'empty_transcript', path: sourcePath }, 400);
+    return jsonResponse({ error: "empty_transcript", path: sourcePath }, 400);
   }
 
-  const updated = new Date().toISOString();
-  const date = frontmatter.date ?? updated.slice(0, 10);
-  const sourceBase = path.basename(sourcePath, '.md');
+  const date = frontmatter.date ?? new Date().toISOString().slice(0, 10);
+  // The source review timestamp, not ingest time, is the stable timestamp for
+  // every derived page. Replaying the same source is therefore byte-identical.
+  const updated = frontmatter.updated ?? `${date}T00:00:00.000Z`;
+  const sourceBase = path.basename(sourcePath, ".md");
   const slug = slugify(sourceBase) || `meeting-${date}`;
-  const title = frontmatter.title && frontmatter.title !== slug
-    ? frontmatter.title
-    : `${slug} — ${date}`;
-  const outputPath = path.join('logs', 'meetings', `${slug}.html`);
+  const title =
+    frontmatter.title && frontmatter.title !== slug ? frontmatter.title : `${slug} — ${date}`;
+  const outputPath = path.join("logs", "meetings", `${slug}.html`);
   const outputAbs = path.join(/*turbopackIgnore: true*/ vault, outputPath);
   const attendees = frontmatter.attendees ?? [];
+  const sourceRevision = crypto.createHash("sha256").update(rawMarkdown, "utf8").digest("hex");
+  const meetingId =
+    frontmatter.meetingId && /^[a-z0-9][a-z0-9_-]{0,95}$/i.test(frontmatter.meetingId)
+      ? frontmatter.meetingId.toLowerCase()
+      : `legacy-${slug}`.slice(0, 96);
+  const decodedSignals = frontmatter.signals ? decodeMeetingSignals(frontmatter.signals) : null;
+  if (frontmatter.signals && !decodedSignals) {
+    return jsonResponse({ error: "invalid_meeting_signals", path: sourcePath }, 400);
+  }
+  const signals = coerceMeetingSignals({
+    ...(decodedSignals ?? {}),
+    meetingId,
+    reviewedAt: decodedSignals?.reviewedAt || updated,
+  });
 
   const html = buildMeetingHtml({
     sourcePath,
@@ -422,11 +514,77 @@ async function handler(request: NextRequest): Promise<NextResponse> {
     duration: frontmatter.duration,
     transcript: body,
     summary: frontmatter.summary,
+    meetingId,
+    sourceRevision,
     updated,
   });
 
-  await fs.mkdir(path.dirname(outputAbs), { recursive: true });
-  await fs.writeFile(outputAbs, html, 'utf-8');
+  let meetingWritten = false;
+  const existingOutput = await fs.readFile(outputAbs, "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  });
+  if (existingOutput !== null) {
+    const existingMeta = parseRobinHtmlCore(existingOutput).metaMap;
+    const existingSource = existingMeta["robin:source"]?.[0];
+    const existingMeetingId = existingMeta["robin:meeting-id"]?.[0];
+    const existingRevision = existingMeta["robin:source-revision"]?.[0];
+    if (
+      existingSource !== sourcePath ||
+      existingMeetingId !== meetingId ||
+      existingRevision !== sourceRevision
+    ) {
+      return jsonResponse(
+        {
+          error: "meeting_output_collision",
+          message:
+            "The deterministic meeting output already belongs to another source or revision. " +
+            "Use a new source filename instead of overwriting a promoted meeting record.",
+          outputPath,
+        },
+        409,
+      );
+    }
+    // Exact-source replay is idempotent. Preserve any later human corrections
+    // on the promoted meeting record instead of regenerating over them.
+  } else {
+    try {
+      const write = await writeWithHistory({
+        absolutePath: outputAbs,
+        html,
+        origin: "web",
+        tool: "meeting-ingest",
+        vaultRoot: vault,
+        summary: `Ingest reviewed meeting: ${title}`,
+        expectedHash: null,
+      });
+      meetingWritten = write.written;
+    } catch (error) {
+      if (error instanceof VaultConflictError) {
+        return jsonResponse(
+          {
+            error: "meeting_output_conflict",
+            message: "The meeting output was created concurrently; retry to verify its ownership.",
+            outputPath,
+          },
+          409,
+        );
+      }
+      throw error;
+    }
+  }
+  const compiled = await compileMeetingSignals({
+    vault,
+    meetingId,
+    sourcePath,
+    sourceRevision,
+    meetingPath: outputPath,
+    meetingSlug: slug,
+    meetingTitle: title,
+    meetingDate: date,
+    sourceUpdated: updated,
+    signals,
+  });
   await prependOrReplaceIngestLog({
     vault,
     sourcePath,
@@ -435,13 +593,36 @@ async function handler(request: NextRequest): Promise<NextResponse> {
     attendees,
     updated,
   });
+  await prependOrReplaceChangelog({
+    vault,
+    sourcePath,
+    title,
+    date,
+    decisions: compiled.decisions.length,
+    commitments: compiled.commitments.length,
+    interventions: compiled.interventions.length,
+  });
+  const changedPaths = [
+    ...(meetingWritten ? [outputPath] : []),
+    ...compiled.decisions.filter((item) => item.written).map((item) => item.path),
+    ...compiled.commitments.filter((item) => item.written).map((item) => item.path),
+    ...compiled.interventions.filter((item) => item.written).map((item) => item.path),
+    ...(compiled.receipt.written ? [compiled.receipt.path] : []),
+  ];
+  if (changedPaths.length > 0) {
+    await refreshIndexPaths(changedPaths).catch((error) => {
+      console.warn("[meeting-ingest] writes committed but index refresh failed:", error);
+    });
+  }
 
   return jsonResponse({
     ok: true,
     sourcePath,
     outputPath,
-    logPath: 'logs/ingest-log.md',
+    logPath: "logs/ingest-log.md",
     pageUrl: vaultPageHref(outputPath),
+    sourceRevision,
+    compiled,
   });
 }
 

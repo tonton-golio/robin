@@ -1,0 +1,502 @@
+/* Living Workspace shared tools.
+   Floating capture panels, command/search, resync feedback, create, theme,
+   and shortcut overlays. Primary navigation and chrome live in
+   workspace-shell.css. */
+
+/* ── Icon buttons ───────────────────────────────────────────────────────
+   Small radius, a 1px --line input-style border, card ground. Hover lifts to
+   the nested surface instead of inverting to ink; press tints with the accent
+   wash (no translate). */
+.robin-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+.robin-iconbtn:hover { background: var(--card-2); color: var(--ink); border-color: var(--line); }
+.robin-iconbtn:active { background: var(--accent-wash); }
+
+/* Stateful icon buttons (resync, save). Accent = in flight; red = error;
+   good = done. */
+.robin-iconbtn[data-state="dirty"],
+.robin-iconbtn[data-state="running"] {
+  color: var(--blue);
+  background: var(--accent-wash);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.robin-iconbtn[data-state="running"] svg { animation: robin-spin 800ms linear infinite; }
+.robin-iconbtn[data-state="done"] { color: var(--good); border-color: var(--good); }
+.robin-iconbtn[data-state="error"] { color: var(--red); border-color: var(--red); }
+.robin-iconbtn:disabled { cursor: default; opacity: 0.5; }
+
+@keyframes robin-spin { to { transform: rotate(360deg); } }
+
+/* Floating meeting and interview panels. */
+@keyframes robin-widget-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent-wash); }
+  70% { box-shadow: 0 0 0 5px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.robin-widget-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.robin-widget {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--card-2);
+  box-shadow: var(--offset-lg);
+  transition: width 200ms cubic-bezier(0.22, 1, 0.36, 1),
+              height 200ms cubic-bezier(0.22, 1, 0.36, 1),
+              max-height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top right;
+  pointer-events: auto;
+}
+
+.robin-widget-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 8px 0 13px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink);
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.robin-widget-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.5;
+  transition: opacity 200ms ease;
+}
+.robin-widget-dot[data-live="true"] {
+  opacity: 1;
+  background: var(--blue);
+  animation: robin-widget-pulse 1.6s ease-out infinite;
+}
+
+.robin-widget-title { font-size: 13px; font-weight: 650; color: var(--ink); }
+
+.robin-widget-status {
+  font-family: var(--font-mono);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  text-transform: var(--lab-case);
+  letter-spacing: var(--lab-track);
+  color: var(--muted);
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.robin-widget-status[data-live="true"] {
+  /* wash-borne accent label on --card-2: --blue is 4.28:1 in dark, --blue-deep
+     is 5.37:1 (spec 9) */
+  color: var(--blue-deep);
+  background: var(--accent-wash);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+
+.robin-widget-head-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+
+.robin-widget-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: background 100ms ease, color 100ms ease;
+}
+.robin-widget-btn:hover { background: var(--card); color: var(--ink); }
+
+.robin-widget-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Command palette ─────────────────────────────────────────────────────
+   Level-3 dialog: --card-2 + --offset-lg + --radius-lg, no border. The scrim
+   is built from --shadow-ink so it darkens in both themes. Search mode is
+   neutral; command mode marks itself with an accent input rule + accent mode
+   badge. The selected result is an accent wash with a spine, not an ink fill. */
+.robin-cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: color-mix(in srgb, var(--shadow-ink) 55%, transparent);
+}
+
+.robin-cmdk {
+  position: fixed;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 101;
+  width: min(640px, calc(100vw - 24px));
+  max-height: 72vh;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--card-2);
+  box-shadow: var(--offset-lg);
+  overflow: hidden;
+}
+
+.robin-cmdk-inputrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--hairline);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.robin-cmdk--command .robin-cmdk-inputrow {
+  border-bottom-color: var(--blue);
+  background: var(--accent-wash);
+}
+
+.robin-cmdk-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 14px;
+  padding: 3px 9px;
+  background: var(--blue);
+  color: var(--on-blue);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  white-space: nowrap;
+}
+
+.robin-cmdk input {
+  width: 100%;
+  background: transparent;
+  color: var(--ink);
+  border: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  padding: 16px 18px;
+}
+.robin-cmdk input:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.robin-cmdk-inputrow .robin-cmdk-mode-badge + input { padding-left: 8px; }
+
+.robin-cmdk-list { max-height: 50vh; overflow-y: auto; padding: 6px; }
+
+.robin-cmdk-group {
+  padding: 8px 8px 4px;
+  font-family: var(--font-mono);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+}
+
+.robin-cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.robin-cmdk-item[data-selected="true"] {
+  background: var(--accent-wash);
+  color: var(--ink);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+
+.robin-cmdk-item-label { flex-shrink: 0; }
+.robin-cmdk-item-desc {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.robin-cmdk-item[data-selected="true"] .robin-cmdk-item-desc { color: var(--ink); }
+
+.robin-cmdk-item-meta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  color: var(--muted);
+}
+.robin-cmdk-item[data-selected="true"] .robin-cmdk-item-meta { color: var(--ink); }
+
+.robin-cmdk-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.robin-cmdk-tip kbd,
+.robin-cmdk-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.robin-cmdk-empty { padding: 24px; color: var(--muted); font-size: 13px; text-align: center; }
+.robin-cmdk-empty code { font-family: var(--font-mono); color: var(--blue); }
+
+.robin-cmdk-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  color: var(--muted);
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────
+   Level 3 (--card-2 + --offset-lg + --radius-lg) with a coloured accent spine
+   on the leading edge: accent by default, good for success, red for error.
+   The spine is the sanctioned accent mark, so there is no surrounding box. */
+.robin-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 110;
+  background: var(--card-2);
+  border: none;
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius-lg);
+  padding: 11px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  box-shadow: var(--offset-lg);
+  max-width: 380px;
+  animation: robin-toast-in 160ms ease-out;
+}
+.robin-toast[data-kind="success"] { border-left-color: var(--good); }
+.robin-toast[data-kind="error"] { border-left-color: var(--red); }
+
+.robin-toast-title { font-weight: 650; letter-spacing: -0.01em; }
+.robin-toast-detail {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  color: var(--muted);
+}
+
+@keyframes robin-toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Create-page dialog (⌘N) ─────────────────────────────────────────────
+   A centered level-3 modal for creating a vault page: title field + a row of
+   kind pills (brain/task/artifact) + a primary action. Reuses the palette's
+   scrim treatment. Built by shell part 2. */
+.robin-create-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: color-mix(in srgb, var(--shadow-ink) 55%, transparent);
+}
+.robin-create-dialog {
+  position: fixed;
+  top: 16vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 101;
+  width: min(520px, calc(100vw - 24px));
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--card-2);
+  box-shadow: var(--offset-lg);
+}
+.robin-create-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+.robin-create-dialog-head .r-bar { flex-shrink: 0; }
+.robin-create-dialog-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.robin-create-dialog-label {
+  font-family: var(--font-mono);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+}
+/* Inputs keep a real 1px --line border (a structural case) + a small radius. */
+.robin-create-dialog-input {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  padding: 10px 12px;
+  outline: none;
+}
+.robin-create-dialog-input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+/* Kind selector: a row of 999px pills; the chosen kind is a wash + accent
+   text, not a solid fill. */
+.robin-create-dialog-kinds { display: flex; gap: 8px; flex-wrap: wrap; }
+.robin-create-dialog-kind {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.robin-create-dialog-kind[aria-pressed="true"] {
+  background: var(--accent-wash);
+  /* wash-borne accent label on the level-3 --card-2 dialog surface (spec 9) */
+  color: var(--blue-deep);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.robin-create-dialog-path {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  color: var(--muted);
+}
+.robin-create-dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── Theme toggle ─────────────────────────────────────────────────────────
+   An icon button (uses .robin-iconbtn base) that flips data-theme on <html>.
+   Marker class for the active glyph swap. */
+.robin-theme-toggle .robin-theme-toggle-sun { display: none; }
+.robin-theme-toggle .robin-theme-toggle-moon { display: inline-flex; }
+:root[data-theme="dark"] .robin-theme-toggle .robin-theme-toggle-sun,
+.robin-theme-toggle[data-theme="dark"] .robin-theme-toggle-sun { display: inline-flex; }
+:root[data-theme="dark"] .robin-theme-toggle .robin-theme-toggle-moon,
+.robin-theme-toggle[data-theme="dark"] .robin-theme-toggle-moon { display: none; }
+
+/* ── Shortcut sheet (?) ───────────────────────────────────────────────────
+   A level-3 modal listing keyboard shortcuts in mono, grouped by section with
+   micro-label headers. Two-column key/description grid. */
+.robin-shortcut-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: color-mix(in srgb, var(--shadow-ink) 55%, transparent);
+}
+.robin-shortcut-sheet {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 101;
+  width: min(560px, calc(100vw - 24px));
+  max-height: 76vh;
+  overflow-y: auto;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--card-2);
+  box-shadow: var(--offset-lg);
+  padding: 20px;
+}
+.robin-shortcut-sheet-title {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+  color: var(--ink);
+}
+.robin-shortcut-group { margin-top: 18px; }
+.robin-shortcut-group:first-of-type { margin-top: 0; }
+.robin-shortcut-group-label {
+  font-family: var(--font-mono);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+.robin-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 13px;
+  color: var(--ink);
+}
+.robin-shortcut-keys { display: inline-flex; gap: 4px; flex-shrink: 0; }
+.robin-shortcut-keys kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}

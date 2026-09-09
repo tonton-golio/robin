@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod/v4';
+import { normalizeTaskPatch, applyTaskPatch } from '@robin/converter';
 import { pageCreate } from './page-create.js';
 import { appendLog, slugify } from '../html-utils.js';
 import type { ToolContext, TaskCreateOutput } from '../types.js';
@@ -14,8 +15,16 @@ export const TaskCreateInputSchema = z.object({
   title: z.string().min(1).describe('Task title'),
   summary: z.string().optional().describe('One-line summary'),
   priority: z.string().optional().describe('Priority: p0 | p1 | p2 | p3'),
-  due: z.string().optional().describe('Due date (ISO-8601)'),
+  due: z.string().optional().describe('Due date / deadline (ISO-8601)'),
+  start: z.string().optional().describe('Planned start date (ISO-8601) — timeline bar origin'),
+  end: z.string().optional().describe('Planned end date (ISO-8601) — timeline bar terminus'),
   owner: z.string().optional().describe('Task owner'),
+  project: z.string().optional().describe('Canonical project reference'),
+  category: z.string().optional(),
+  next_action: z.string().optional().describe('Concrete next action, not an inferred commitment'),
+  acceptance: z.string().optional().describe('Evidence required for completion'),
+  kind: z.string().optional(),
+  parent: z.string().optional(),
   body_md: z.string().optional().describe('Optional markdown body'),
   tags: z.array(z.string()).optional().describe('Tags'),
 });
@@ -31,16 +40,9 @@ export async function taskCreate(
   // Canonical task lifecycle key is `status` (the on-disk vault convention; see
   // meta.ts / 49 task pages). New tasks open in the `open` status — the most
   // common initial status across the vault's task pages. Never write `state:`.
-  const frontmatter: Record<string, unknown> = {
-    title: input.title,
-    type: 'task',
-    status: 'open',
-  };
-  if (input.summary) frontmatter['summary'] = input.summary;
-  if (input.priority) frontmatter['priority'] = input.priority;
-  if (input.due) frontmatter['due'] = input.due;
-  if (input.owner) frontmatter['owner'] = input.owner;
-  if (input.tags?.length) frontmatter['tags'] = input.tags;
+  const frontmatter = applyTaskPatch({ title: input.title, type: 'task', status: 'open' }, normalizeTaskPatch({ ...input, status: 'open' }));
+  if (input.summary) frontmatter.summary = input.summary;
+  if (input.tags?.length) frontmatter.tags = input.tags;
 
   const result = await pageCreate(
     {

@@ -5,7 +5,6 @@ import path from 'node:path';
 // tsconfig defines, so tests can import modules that use `@/lib/...` (e.g. the
 // edit-store / revert action, which read the vault via `@/lib/vault`).
 export default defineConfig({
-  oxc: { jsx: { runtime: 'automatic' } },
   test: {
     environment: 'node',
   },

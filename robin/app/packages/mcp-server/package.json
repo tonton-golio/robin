@@ -24,6 +24,7 @@
     "@robin/converter": "*",
     "@robin/indexer": "*",
     "@robin/memory": "*",
+    "@robin/vault-io": "*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "hast-util-from-html": "^2.0.3",
     "hast-util-to-html": "^9.0.4",

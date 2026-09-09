@@ -25,7 +25,7 @@ export default function Error({
   return (
     <div className="today-page" role="alert">
       <div className="today-hero">
-        <span className="today-date" style={{ color: 'var(--warning-rust)' }}>
+        <span className="today-date" style={{ color: 'var(--red)' }}>
           dashboard unavailable
         </span>
         <h1 className="today-title">Something broke loading today.</h1>
@@ -37,8 +37,8 @@ export default function Error({
 
       <section className="today-card">
         <div className="today-card-body" style={{ display: 'grid', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-1)' }}>
-            <AlertOctagon size={15} strokeWidth={1.5} style={{ color: 'var(--warning-rust)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)' }}>
+            <AlertOctagon size={15} strokeWidth={1.5} style={{ color: 'var(--red)' }} />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
               {error.message || 'Unexpected error'}
               {error.digest ? ` (${error.digest})` : ''}
@@ -54,9 +54,9 @@ export default function Error({
                 gap: 8,
                 fontSize: 13,
                 fontFamily: 'var(--font-mono)',
-                color: 'var(--robin-amber)',
+                color: 'var(--blue)',
                 background: 'transparent',
-                border: '1px solid color-mix(in srgb, var(--robin-amber) 45%, var(--border-0))',
+                border: '1px solid color-mix(in srgb, var(--blue) 45%, var(--line))',
                 borderRadius: 6,
                 padding: '7px 12px',
                 cursor: 'pointer',

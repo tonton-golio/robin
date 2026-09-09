@@ -89,9 +89,7 @@ One file per open task. Frontmatter carries status, priority, due, owner, projec
 
 A task is something that *should be acted on*. Not "we're tracking X" (that's a project page or hub) and not "we noticed X" (that's a memory event).
 
-Tasks move through states: `open → in-progress → done`, with side states for `blocked`, `dropped`, `superseded`, `cancelled`.
-
-A separate `workflow:` field tracks queue position: `inbox → next → active → waiting → review → scheduled → backlog`.
+Tasks move through states: `open → in-progress → done`, with side states for `blocked`, `dropped`, `superseded`, `cancelled`. Status is the single organizing axis — there is no separate workflow/lane field.
 
 Move done tasks older than ~14 days to `tasks/archive/` to keep the active set scannable.
 

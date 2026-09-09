@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * LiveRecorder.tsx
@@ -14,12 +14,18 @@
  *   audioPath back to the parent.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { bestMimeType, blobToObjectURL, formatDuration, getBlobDurationSec } from '@/lib/audio-utils';
-import { DeepgramLive, type CommittedLine } from '@/lib/deepgram-live';
-import { Button } from '@/components/ui';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  bestMimeType,
+  blobToObjectURL,
+  formatDuration,
+  getBlobDurationSec,
+} from "@/lib/audio-utils";
+import { DeepgramLive, type CommittedLine } from "@/lib/deepgram-live";
+import { Button } from "@/components/ui";
 
 export interface LiveRecordingResult {
+  meetingId: string;
   transcript: string;
   durationSec: number;
   audioPath: string | null;
@@ -31,7 +37,13 @@ interface LiveRecorderProps {
   onStatusChange?: (status: LiveStatus) => void;
 }
 
-export type LiveStatus = 'idle' | 'connecting' | 'recording' | 'reconnecting' | 'finalizing' | 'error';
+export type LiveStatus =
+  | "idle"
+  | "connecting"
+  | "recording"
+  | "reconnecting"
+  | "finalizing"
+  | "error";
 
 const LEVEL_BARS = 28;
 const LEVEL_SMOOTHING = 0.8;
@@ -40,7 +52,7 @@ const LEVEL_SMOOTHING = 0.8;
 // localStorage while recording. 5s is frequent enough to lose almost nothing,
 // rare enough to be negligible I/O.
 const CHECKPOINT_INTERVAL_MS = 5000;
-const LS_CHECKPOINT_PREFIX = 'robin:meeting:partial:';
+const LS_CHECKPOINT_PREFIX = "robin:meeting:partial:";
 
 // Bounded in-memory audio buffer. MediaRecorder chunks accumulate in memory
 // until "Stop & save" assembles the blob; an unbounded buffer would grow until
@@ -50,11 +62,11 @@ const LS_CHECKPOINT_PREFIX = 'robin:meeting:partial:';
 const MAX_AUDIO_BUFFER_BYTES = 400 * 1024 * 1024;
 
 export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) {
-  const [status, setStatus] = useState<LiveStatus>('idle');
+  const [status, setStatus] = useState<LiveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [lines, setLines] = useState<CommittedLine[]>([]);
-  const [interim, setInterim] = useState('');
+  const [interim, setInterim] = useState("");
   const [levels, setLevels] = useState<number[]>(Array(LEVEL_BARS).fill(0));
   const [captureSystem, setCaptureSystem] = useState(true);
   const [sysNote, setSysNote] = useState<string | null>(null);
@@ -75,9 +87,13 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
   // Crash-safety checkpoint plumbing.
   const sessionIdRef = useRef<string | null>(null);
   const checkpointTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Serialize checkpoint requests so a slower older POST cannot arrive after a
+  // newer one and regress the durable transcript. Stop waits for this queue
+  // before issuing DELETE, preventing an in-flight POST from recreating it.
+  const checkpointWriteRef = useRef<Promise<void>>(Promise.resolve());
   // Latest committed transcript text, kept in a ref so the checkpoint interval
   // can read it without being re-created on every commit.
-  const transcriptRef = useRef('');
+  const transcriptRef = useRef("");
 
   const setStatusSafe = useCallback(
     (s: LiveStatus) => {
@@ -96,7 +112,11 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
     try {
       localStorage.setItem(
         `${LS_CHECKPOINT_PREFIX}${sessionId}`,
-        JSON.stringify({ updated: Date.now(), elapsedSec: (Date.now() - startRef.current) / 1000, transcript: text }),
+        JSON.stringify({
+          updated: Date.now(),
+          elapsedSec: (Date.now() - startRef.current) / 1000,
+          transcript: text,
+        }),
       );
     } catch {
       /* storage full / disabled — non-fatal, the server checkpoint still runs */
@@ -106,36 +126,48 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
   const flushCheckpoint = useCallback(
     (sessionId: string, text: string) => {
       writeLocalCheckpoint(sessionId, text);
-      // Fire-and-forget; a failed checkpoint must never disrupt recording.
-      void fetch('/api/meeting/partial', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          transcript: text,
-          durationSec: (Date.now() - startRef.current) / 1000,
-        }),
-        keepalive: true, // let it complete even if the tab is closing
-      }).catch(() => {});
+      checkpointWriteRef.current = checkpointWriteRef.current
+        .catch(() => {})
+        .then(async () => {
+          const response = await fetch("/api/meeting/partial", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId,
+              transcript: text,
+              durationSec: (Date.now() - startRef.current) / 1000,
+            }),
+            keepalive: true, // let it complete even if the tab is closing
+          });
+          if (!response.ok) throw new Error(`checkpoint failed (${response.status})`);
+        });
+      // Recording remains usable when checkpoint storage is temporarily down.
+      void checkpointWriteRef.current.catch(() => {});
+      return checkpointWriteRef.current;
     },
     [writeLocalCheckpoint],
   );
 
-  const clearCheckpoint = useCallback((sessionId: string) => {
+  const clearCheckpoint = useCallback(async (sessionId: string) => {
+    await checkpointWriteRef.current.catch(() => {});
+    const response = await fetch(
+      `/api/meeting/partial?sessionId=${encodeURIComponent(sessionId)}`,
+      {
+        method: "DELETE",
+        keepalive: true,
+      },
+    );
+    if (!response.ok) throw new Error(`checkpoint cleanup failed (${response.status})`);
     try {
       localStorage.removeItem(`${LS_CHECKPOINT_PREFIX}${sessionId}`);
     } catch {
       /* non-fatal */
     }
-    void fetch(`/api/meeting/partial?sessionId=${encodeURIComponent(sessionId)}`, {
-      method: 'DELETE',
-      keepalive: true,
-    }).catch(() => {});
   }, []);
 
   // Auto-scroll captions to the latest line.
   useEffect(() => {
-    captionsRef.current?.scrollTo({ top: captionsRef.current.scrollHeight, behavior: 'smooth' });
+    captionsRef.current?.scrollTo({ top: captionsRef.current.scrollHeight, behavior: "smooth" });
   }, [lines, interim]);
 
   const cleanup = useCallback(() => {
@@ -152,10 +184,13 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
     setLevels(Array(LEVEL_BARS).fill(0));
   }, []);
 
-  useEffect(() => () => {
-    dgRef.current?.close();
-    cleanup();
-  }, [cleanup]);
+  useEffect(
+    () => () => {
+      dgRef.current?.close();
+      cleanup();
+    },
+    [cleanup],
+  );
 
   // Last-ditch checkpoint if the tab is closed/refreshed mid-recording. The
   // 5s interval covers crashes; this covers the user closing the tab. We don't
@@ -163,10 +198,10 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
   useEffect(() => {
     const onBeforeUnload = () => {
       const sid = sessionIdRef.current;
-      if (sid && status === 'recording') flushCheckpoint(sid, transcriptRef.current);
+      if (sid && status === "recording") flushCheckpoint(sid, transcriptRef.current);
     };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [status, flushCheckpoint]);
 
   const startMeter = useCallback((analyser: AnalyserNode) => {
@@ -178,11 +213,13 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
       const rms = Math.sqrt(sum / data.length) / 255;
       smoothRef.current = smoothRef.current * LEVEL_SMOOTHING + rms * (1 - LEVEL_SMOOTHING);
       const lvl = smoothRef.current;
-      setLevels(Array.from({ length: LEVEL_BARS }, (_, i) => {
-        // Center-weighted bars react around the middle for a waveform feel.
-        const dist = Math.abs(i - LEVEL_BARS / 2) / (LEVEL_BARS / 2);
-        return Math.max(0, lvl * (1.2 - dist));
-      }));
+      setLevels(
+        Array.from({ length: LEVEL_BARS }, (_, i) => {
+          // Center-weighted bars react around the middle for a waveform feel.
+          const dist = Math.abs(i - LEVEL_BARS / 2) / (LEVEL_BARS / 2);
+          return Math.max(0, lvl * (1.2 - dist));
+        }),
+      );
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -191,9 +228,9 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
   const handleStart = useCallback(async () => {
     setError(null);
     setLines([]);
-    setInterim('');
+    setInterim("");
     setSysNote(null);
-    setStatusSafe('connecting');
+    setStatusSafe("connecting");
 
     // 1. System / tab audio (the other participants). Requested FIRST so the
     //    click's user-activation is still fresh for the screen-share picker.
@@ -214,13 +251,15 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
         if (display.getAudioTracks().length > 0) {
           displayStream = display;
           displayStreamRef.current = display;
-          setSysNote('Capturing mic + shared audio.');
+          setSysNote("Capturing mic + shared audio.");
         } else {
-          setSysNote('No audio was shared — recording mic only. Re-share and tick “Share tab audio”.');
+          setSysNote(
+            "No audio was shared — recording mic only. Re-share and tick “Share tab audio”.",
+          );
         }
       } catch {
         // User cancelled the picker or it’s unsupported → mic-only.
-        setSysNote('Shared-audio capture skipped — recording mic only.');
+        setSysNote("Shared-audio capture skipped — recording mic only.");
       }
     }
 
@@ -233,7 +272,7 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
     } catch (err) {
       displayStream?.getTracks().forEach((t) => t.stop());
       setError(`Microphone access denied: ${err instanceof Error ? err.message : String(err)}`);
-      setStatusSafe('error');
+      setStatusSafe("error");
       return;
     }
     streamRef.current = stream;
@@ -258,9 +297,9 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
     startMeter(analyser);
 
     // Stable session id for crash-safety checkpoints (filesystem-safe).
-    const sessionId = `live-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+    const sessionId = `live-${new Date().toISOString().replace(/[:.]/g, "-")}`;
     sessionIdRef.current = sessionId;
-    transcriptRef.current = '';
+    transcriptRef.current = "";
 
     // 3. Deepgram socket
     const dg = new DeepgramLive({
@@ -269,20 +308,22 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
         setLines([...committed]);
         // Keep the latest committed transcript in a ref so the periodic
         // checkpoint (and beforeunload) can read it without re-subscribing.
-        transcriptRef.current = dgRef.current?.transcript ?? '';
+        transcriptRef.current = dgRef.current?.transcript ?? "";
       },
       onError: (msg) => {
         setError(msg);
-        setStatusSafe('error');
+        setStatusSafe("error");
       },
       // Mid-session drop → show a reconnecting state but keep the session alive.
       onReconnecting: (attempt, delayMs) => {
-        setStatusSafe('reconnecting');
-        setSysNote(`Connection dropped — reconnecting (attempt ${attempt}, ${Math.round(delayMs / 100) / 10}s)…`);
+        setStatusSafe("reconnecting");
+        setSysNote(
+          `Connection dropped — reconnecting (attempt ${attempt}, ${Math.round(delayMs / 100) / 10}s)…`,
+        );
       },
       onReconnected: () => {
-        setStatusSafe('recording');
-        setSysNote('Reconnected — live transcript resumed.');
+        setStatusSafe("recording");
+        setSysNote("Reconnected — live transcript resumed.");
       },
     });
     dgRef.current = dg;
@@ -290,15 +331,15 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
       await dg.connect();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setStatusSafe('error');
+      setStatusSafe("error");
       cleanup();
       return;
     }
 
     // If the user stops the browser's screen-share via its own banner, drop
     // the note so they know shared audio is no longer being captured.
-    displayStream?.getAudioTracks()[0]?.addEventListener('ended', () => {
-      setSysNote('Shared audio stopped — now recording mic only.');
+    displayStream?.getAudioTracks()[0]?.addEventListener("ended", () => {
+      setSysNote("Shared audio stopped — now recording mic only.");
     });
 
     // 4. Recorder → Deepgram + local buffer (records the mixed stream).
@@ -327,10 +368,7 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
         // transcription fail on the whole file, not just the trimmed window. So
         // we keep the head and evict the *second*-oldest chunk (index 1), which
         // drops the earliest audio while preserving a playable container.
-        while (
-          bufferBytesRef.current > MAX_AUDIO_BUFFER_BYTES &&
-          chunksRef.current.length > 2
-        ) {
+        while (bufferBytesRef.current > MAX_AUDIO_BUFFER_BYTES && chunksRef.current.length > 2) {
           const dropped = chunksRef.current.splice(1, 1)[0];
           if (dropped) bufferBytesRef.current -= dropped.size;
           setBufferTrimmed(true);
@@ -351,11 +389,11 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
       if (transcriptRef.current.trim()) flushCheckpoint(sessionId, transcriptRef.current);
     }, CHECKPOINT_INTERVAL_MS);
 
-    setStatusSafe('recording');
+    setStatusSafe("recording");
   }, [captureSystem, cleanup, setStatusSafe, startMeter, flushCheckpoint]);
 
   const handleStop = useCallback(async () => {
-    setStatusSafe('finalizing');
+    setStatusSafe("finalizing");
     const recorder = recorderRef.current;
     const dg = dgRef.current;
     // Snapshot elapsed time now (before the await chain runs the clock on).
@@ -368,17 +406,17 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
 
     // Wait for the recorder to flush its final chunk before closing.
     await new Promise<void>((resolve) => {
-      if (!recorder || recorder.state === 'inactive') return resolve();
+      if (!recorder || recorder.state === "inactive") return resolve();
       recorder.onstop = () => resolve();
       recorder.stop();
     });
 
     // Give Deepgram a beat to return the trailing final result.
     await new Promise((r) => setTimeout(r, 600));
-    const transcript = dg?.transcript ?? '';
+    const transcript = dg?.transcript ?? "";
     dg?.close();
 
-    const mimeType = bestMimeType() || 'audio/webm';
+    const mimeType = bestMimeType() || "audio/webm";
     const blob = new Blob(chunksRef.current, { type: mimeType });
     // Prefer the recorder's tracked elapsed time (already exact); only fall
     // back to a decode for small blobs (see getBlobDurationSec) — this avoids
@@ -392,9 +430,9 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
     let audioPath: string | null = null;
     try {
       const fd = new FormData();
-      fd.append('audio', blob, 'recording.webm');
-      fd.append('durationSec', String(durationSec));
-      const res = await fetch('/api/meeting/upload', { method: 'POST', body: fd });
+      fd.append("audio", blob, "recording.webm");
+      fd.append("durationSec", String(durationSec));
+      const res = await fetch("/api/meeting/upload", { method: "POST", body: fd });
       if (res.ok) {
         const data = (await res.json()) as { audioPath?: string };
         audioPath = data.audioPath ?? null;
@@ -406,16 +444,22 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
     // The recording is now safely in the recorder result + uploaded audio, so
     // the crash-safety checkpoint is no longer needed — clear it.
     const sid = sessionIdRef.current;
-    if (sid) clearCheckpoint(sid);
+    if (sid) await clearCheckpoint(sid).catch(() => {});
     sessionIdRef.current = null;
 
-    setStatusSafe('idle');
-    onComplete({ transcript, durationSec, audioPath, objectUrl });
+    setStatusSafe("idle");
+    onComplete({
+      meetingId: sid ?? `live-${Date.now()}`,
+      transcript,
+      durationSec,
+      audioPath,
+      objectUrl,
+    });
   }, [cleanup, onComplete, setStatusSafe, clearCheckpoint]);
 
-  const isRecording = status === 'recording';
-  const isReconnecting = status === 'reconnecting';
-  const isBusy = status === 'connecting' || status === 'finalizing';
+  const isRecording = status === "recording";
+  const isReconnecting = status === "reconnecting";
+  const isBusy = status === "connecting" || status === "finalizing";
   const hasCaptions = lines.length > 0 || interim.length > 0;
 
   return (
@@ -426,9 +470,9 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
           <Button
             variant="destructive"
             onClick={handleStart}
-            className="group rounded-full pl-4 pr-5 py-2.5 hover:shadow-[0_0_24px_-4px_var(--warning-rust)]"
+            className="group rounded-full pl-4 pr-5 py-2.5 hover:shadow-[0_0_24px_-4px_var(--red)]"
           >
-            <span className="h-2.5 w-2.5 rounded-full bg-white" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[var(--on-red)]" />
             Start recording
           </Button>
         )}
@@ -446,19 +490,37 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
 
         {isBusy && (
           <div className="flex items-center gap-2.5 rounded-full bg-secondary pl-4 pr-5 py-2.5 text-muted-foreground text-sm">
-            <svg className="h-4 w-4 animate-spin text-[var(--robin-amber)]" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <svg
+              className="h-4 w-4 animate-spin text-[var(--blue)]"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            {status === 'connecting' ? 'Connecting to Deepgram…' : 'Finalizing & saving…'}
+            {status === "connecting" ? "Connecting to Deepgram…" : "Finalizing & saving…"}
           </div>
         )}
 
         {/* Reconnecting pill — recording continues, live stream is paused */}
         {isReconnecting && (
-          <div className="flex items-center gap-2.5 rounded-full bg-[color-mix(in_srgb,var(--warning-rust)_14%,transparent)] pl-3.5 pr-4 py-2 text-[var(--warning-rust)] text-sm">
+          <div className="flex items-center gap-2.5 rounded-full bg-[var(--red-wash)] pl-3.5 pr-4 py-2 text-[var(--red)] text-sm">
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
             Reconnecting…
@@ -470,7 +532,7 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
           {levels.map((lvl, i) => (
             <div
               key={i}
-              className={`w-[3px] rounded-full transition-[height] duration-100 ${isRecording ? 'bg-[var(--status-stable)]' : isReconnecting ? 'bg-[var(--warning-rust)]' : 'bg-border'}`}
+              className={`w-[3px] rounded-full transition-[height] duration-100 ${isRecording ? "bg-[var(--good)]" : isReconnecting ? "bg-[var(--red)]" : "bg-border"}`}
               style={{ height: `${Math.max(8, lvl * 100)}%` }}
             />
           ))}
@@ -479,7 +541,7 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
         {/* Timer + REC dot */}
         {(isRecording || isReconnecting || isBusy) && (
           <span className="flex items-center gap-2 font-mono text-sm tabular-nums text-muted-foreground">
-            {isRecording && <span className="h-2 w-2 rounded-full bg-[var(--warning-rust)] animate-pulse" />}
+            {isRecording && <span className="h-2 w-2 rounded-full bg-[var(--red)] animate-pulse" />}
             {formatDuration(elapsedSec)}
           </span>
         )}
@@ -493,36 +555,36 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
               type="checkbox"
               checked={captureSystem}
               onChange={(e) => setCaptureSystem(e.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--status-stable)]"
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--blue)]"
             />
             <span>
-              Also capture the other side — only the audio of a{' '}
+              Also capture the other side — only the audio of a{" "}
               <strong className="font-medium text-foreground">shared browser tab or window</strong>.
-              You’ll be prompted to pick one and must tick{' '}
-              <strong className="font-medium text-foreground">“Share tab audio”</strong> in that dialog.
+              You’ll be prompted to pick one and must tick{" "}
+              <strong className="font-medium text-foreground">“Share tab audio”</strong> in that
+              dialog.
             </span>
           </label>
           {captureSystem && (
-            <p className="pl-[22px] text-[11px] leading-relaxed text-muted-foreground/70">
-              This cannot hear the Zoom or Teams <em>desktop apps</em> — the browser has no access to
-              native app/system audio on macOS. To capture the other side, join the call in a browser
-              tab (Zoom/Meet/Teams web) and share that tab, or run the meeting on speaker. Wear
-              headphones to keep the far side out of your mic (avoids double-capture + echo).
+            <p className="pl-[22px] text-[11px] leading-relaxed text-muted-foreground">
+              This cannot hear the Zoom or Teams <em>desktop apps</em> — the browser has no access
+              to native app/system audio on macOS. To capture the other side, join the call in a
+              browser tab (Zoom/Meet/Teams web) and share that tab, or run the meeting on speaker.
+              Wear headphones to keep the far side out of your mic (avoids double-capture + echo).
             </p>
           )}
         </div>
       )}
 
       {/* ── System-audio / reconnect status note ── */}
-      {sysNote && (
-        <p className="-mt-1 text-xs text-muted-foreground">{sysNote}</p>
-      )}
+      {sysNote && <p className="-mt-1 text-xs text-muted-foreground">{sysNote}</p>}
 
       {/* ── Buffer-trim warning (very long meeting) ── */}
       {bufferTrimmed && (
-        <p className="-mt-1 text-xs text-[var(--warning-rust)]">
-          This recording is very long — the earliest audio was dropped from the saved file to protect
-          the browser. The transcript so far is unaffected. Consider stopping &amp; saving in segments.
+        <p className="-mt-1 text-xs text-[var(--red)]">
+          This recording is very long — the earliest audio was dropped from the saved file to
+          protect the browser. The transcript so far is unaffected. Consider stopping &amp; saving
+          in segments.
         </p>
       )}
 
@@ -534,10 +596,10 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
         {!hasCaptions && (
           <p className="flex h-full min-h-[148px] items-center justify-center text-center text-sm text-muted-foreground">
             {isReconnecting
-              ? 'Reconnecting to Deepgram… your transcript is preserved and live captions resume shortly.'
+              ? "Reconnecting to Deepgram… your transcript is preserved and live captions resume shortly."
               : isRecording
-                ? 'Listening… start speaking and the transcript appears here live.'
-                : 'Press Start recording. Live captions with speaker labels stream in real time.'}
+                ? "Listening… start speaking and the transcript appears here live."
+                : "Press Start recording. Live captions with speaker labels stream in real time."}
           </p>
         )}
 
@@ -557,7 +619,7 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
       </div>
 
       {error && (
-        <div className="rounded-lg border border-[var(--warning-rust)]/30 bg-[var(--warning-rust)]/10 px-4 py-2.5 text-sm text-[var(--warning-rust)]">
+        <div className="rounded-[var(--radius)] border border-[color-mix(in_srgb,var(--red)_30%,transparent)] bg-[var(--red-wash)] px-4 py-2.5 text-sm text-[var(--red)]">
           {error}
         </div>
       )}
@@ -565,13 +627,17 @@ export function LiveRecorder({ onComplete, onStatusChange }: LiveRecorderProps) 
   );
 }
 
+// Speaker distinction is functional (who said what), so we keep six hues — but
+// every one is a Quiet Slate token, so they flip with the theme and clear 4.5:1
+// on the caption surface in both. Complete literal class strings only: Tailwind
+// v4 emits nothing for an interpolated class name.
 const SPEAKER_COLORS = [
-  'text-sky-400',
-  'text-emerald-400',
-  'text-amber-400',
-  'text-fuchsia-400',
-  'text-rose-400',
-  'text-violet-400',
+  "text-[var(--blue)]",
+  "text-[var(--good)]",
+  "text-[var(--warn)]",
+  "text-[var(--red)]",
+  "text-[var(--ink)]",
+  "text-[var(--muted)]",
 ];
 
 function speakerColor(speaker: number): string {

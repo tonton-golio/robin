@@ -6,6 +6,7 @@ import type { RobinBlock, RobinMeta } from '@robin/converter';
 import { parseRobinHtmlCore, extractMetaFromMap } from '@robin/converter';
 import { resolveContainedVaultPath } from './vault-file';
 import { vaultPageHref } from './routes';
+import { isArchivePath } from './archive';
 
 /**
  * Top-level vault roots that hold slug-addressable HTML pages. buildSlugMap only
@@ -295,7 +296,11 @@ async function walkDir(dir: string, map: Map<string, string>, vaultRoot: string)
         // a root is now reproducible (lexicographically smallest path) across
         // filesystems instead of depending on raw readdir order.
         for (const key of [rootRel, relNoExt, base]) {
-          if (key && !map.has(key)) map.set(key, rel);
+          if (!key) continue;
+          const existing = map.get(key);
+          // Keep explicit archive paths addressable, but prefer a current page
+          // when a bare basename or another path-style key collides.
+          if (!existing || (isArchivePath(existing) && !isArchivePath(rel))) map.set(key, rel);
         }
       }
     }

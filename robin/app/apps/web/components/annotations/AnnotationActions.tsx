@@ -2,9 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, CircleAlert, RotateCcw, X } from 'lucide-react';
 import { isClosedAnnotationStatus } from '@/lib/annotations';
-import { Button } from '@/components/ui';
 
 interface AnnotationActionsProps {
   id: string;
@@ -13,20 +11,30 @@ interface AnnotationActionsProps {
   renderPath?: string;
 }
 
-const STATUS_COPY: Record<string, string> = {
-  open: 'Reopened from Comments page.',
-  resolved: 'Resolved from Comments page.',
-  rejected: 'Rejected from Comments page.',
-  'needs-attention': 'Marked needs attention from Comments page.',
-};
-
+/**
+ * Disposition controls for one comment in the Activity Comments lens.
+ *
+ * Resolve opens an inline resolution-note input ("what closed this?") saved to
+ * `resolution_md` — the field the schema always had, finally populatable, so no
+ * more canned "Resolved from Comments page." Needs-attention is one keystroke.
+ * Reject is a red-bordered inline confirm before the status event is appended
+ * (nothing acts on a rejected comment). Closed rows offer Reopen. All writes go
+ * through PATCH /api/annotations and refresh the ledger.
+ *
+ * NOTE (reported): the store's status-event writer does not yet persist
+ * `result_link`; a resolution's produced-artifact link is rendered on read but
+ * cannot be written from here until the store accepts it.
+ */
 export function AnnotationActions({ id, status, pagePath, renderPath }: AnnotationActionsProps) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [note, setNote] = useState('');
   const closed = isClosedAnnotationStatus(status);
 
-  async function update(nextStatus: string) {
+  async function update(nextStatus: string, resolutionMd?: string) {
     setPending(nextStatus);
     setError(null);
     try {
@@ -38,13 +46,16 @@ export function AnnotationActions({ id, status, pagePath, renderPath }: Annotati
           status: nextStatus,
           page_path: pagePath,
           render_path: renderPath ?? pagePath,
-          resolution_md: STATUS_COPY[nextStatus] ?? `Marked ${nextStatus} from Comments page.`,
+          ...(resolutionMd ? { resolution_md: resolutionMd } : {}),
         }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? `HTTP ${res.status}`);
       }
+      setResolveOpen(false);
+      setRejectOpen(false);
+      setNote('');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -55,38 +66,104 @@ export function AnnotationActions({ id, status, pagePath, renderPath }: Annotati
 
   if (closed) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="xs" disabled={pending !== null} onClick={() => update('open')}>
-          <RotateCcw size={12} strokeWidth={1.7} />
+      <div className="act-cactions">
+        <button
+          type="button"
+          className="act-rowbtn"
+          data-act="reopen"
+          disabled={pending !== null}
+          onClick={() => update('open')}
+        >
           Reopen
-        </Button>
-        {error ? <span className="font-mono text-[11px] text-[var(--warning-rust)]">{error}</span> : null}
+        </button>
+        {error ? <span className="act-rowbtn-err r-mono">{error}</span> : null}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" size="xs" disabled={pending !== null} onClick={() => update('resolved')}>
-        <Check size={12} strokeWidth={1.7} />
-        Resolve
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="xs"
-        disabled={pending !== null}
-        onClick={() => update('needs-attention')}
-      >
-        <CircleAlert size={12} strokeWidth={1.7} />
-        Needs attention
-      </Button>
-      <Button type="button" variant="ghost" size="xs" disabled={pending !== null} onClick={() => update('rejected')}>
-        <X size={12} strokeWidth={1.7} />
-        Reject
-      </Button>
-      {error ? <span className="font-mono text-[11px] text-[var(--warning-rust)]">{error}</span> : null}
+    <div className="act-cactions-wrap">
+      <div className="act-cactions">
+        <button
+          type="button"
+          className="act-rowbtn"
+          data-act="resolve"
+          disabled={pending !== null}
+          onClick={() => {
+            setResolveOpen((v) => !v);
+            setRejectOpen(false);
+          }}
+        >
+          Resolve
+          <span className="act-rowbtn-key">r</span>
+        </button>
+        <button
+          type="button"
+          className="act-rowbtn"
+          data-act="attention"
+          disabled={pending !== null}
+          onClick={() => update('needs-attention')}
+        >
+          Needs attention
+          <span className="act-rowbtn-key">a</span>
+        </button>
+        <button
+          type="button"
+          className="act-rowbtn act-rowbtn--danger"
+          data-act="reject"
+          disabled={pending !== null}
+          onClick={() => {
+            setRejectOpen((v) => !v);
+            setResolveOpen(false);
+          }}
+        >
+          Reject
+        </button>
+        {error ? <span className="act-rowbtn-err r-mono">{error}</span> : null}
+      </div>
+
+      {resolveOpen ? (
+        <form
+          className="act-resolveform"
+          onSubmit={(e) => {
+            e.preventDefault();
+            update('resolved', note.trim() || 'Resolved from the activity ledger.');
+          }}
+        >
+          <input
+            type="text"
+            autoFocus
+            placeholder="what closed this? (saved to resolution_md)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <button type="submit" className="r-btn r-btn--ink" disabled={pending !== null}>
+            Save + resolve
+          </button>
+        </form>
+      ) : null}
+
+      {rejectOpen ? (
+        <div className="act-rejectconfirm">
+          <span>Marks it rejected — Robin will not act on it.</span>
+          <button
+            type="button"
+            className="r-btn r-btn--danger"
+            disabled={pending !== null}
+            onClick={() => update('rejected', 'Rejected from the activity ledger.')}
+          >
+            Confirm reject
+          </button>
+          <button
+            type="button"
+            className="r-btn r-btn--ghost"
+            disabled={pending !== null}
+            onClick={() => setRejectOpen(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
-

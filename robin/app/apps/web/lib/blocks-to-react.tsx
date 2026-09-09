@@ -283,7 +283,7 @@ function HubChildrenBlock({
       data-query={query}
       className="hub-children-placeholder"
     >
-      <li className="text-slate-500 italic text-sm">
+      <li className="text-[var(--muted)] italic text-sm">
         Hub children: {query} (loading requires indexer)
       </li>
     </ul>

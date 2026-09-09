@@ -17,9 +17,10 @@ These apply to all page types.
 
 | Tag | Cardinality | Type | Notes |
 |---|---|---|---|
-| `robin:version` | 1 | string | Spec version. Currently `0.2`. |
+| `robin:version` | 1 | string | `0.2` is the producer default; `0.3` is a staged opt-in. |
+| `robin:id` | 0..1 | lowercase UUID | Required exactly once in v0.3, prohibited in v0.2, and immutable after migration. |
 | `robin:slug` | 1 | string | Kebab-case. The slug matters for wikilink resolution. |
-| `robin:path` | 1 | string | Vault-relative path. The identity. |
+| `robin:path` | 1 | string | Vault-relative locator. It is the operational identity in v0.2; v0.3 stable identity is `robin:id`. |
 | `robin:type` | 1 | enum | See [type vocabulary](./page-format.md#type-vocabulary). |
 | `robin:updated` | 1 | ISO-8601 UTC | Set on every save. |
 | `robin:created` | 0..1 | ISO-8601 UTC | Set once on create. |
@@ -27,7 +28,22 @@ These apply to all page types.
 | `robin:summary` | 0..1 | string | One-line summary. ≤120 chars. Surfaced in search. |
 | `robin:tag` | 0..* | string | One tag per meta element. Never comma-joined. |
 | `robin:owner` | 0..1 | string | Person responsible. |
-| `robin:source` | 0..* | string | Vault-relative paths to inbox source files. |
+| `robin:source` | 0..* | string | Legacy v0.2 provenance. Prohibited in v0.3. |
+| `robin:source-kind` | 0..* | enum | v0.3 only. Ordered one-for-one with `robin:source-ref`. |
+| `robin:source-ref` | 0..* | string | v0.3 only. Non-empty, unique reference paired by order with `robin:source-kind`. |
+
+### Version boundary
+
+The examples below deliberately remain v0.2 because ordinary conversion still
+emits v0.2. v0.3 does not change the `<article data-robin-doc>` body. It adds
+one immutable lowercase UUID and replaces `robin:source` with optional typed
+provenance pairs. If either typed array is present, both arrays must be present
+with equal cardinality; each reference is non-empty and unique.
+
+Opt in only an explicitly reviewed page set with the converter's
+`migrate --to v0.3` command. Run `--dry-run`, take an independent backup, apply,
+then run `--check`. Once adopted, normal writes refuse version downgrade or ID
+replacement; do not hand-edit those fields.
 
 ## `type=task`
 
@@ -36,9 +52,10 @@ These apply to all page types.
 | `robin:status` | 1 | enum | `open` \| `in-progress` \| `done` \| `blocked` \| `dropped` \| `superseded` \| `cancelled`. |
 | `robin:priority` | 0..1 | enum | `p0` \| `p1` \| `p2` \| `p3`. Higher number = lower priority. |
 | `robin:due` | 0..1 | ISO-8601 date | Format: `2026-06-15`. No time component. |
-| `robin:workflow` | 0..1 | enum | `inbox` \| `next` \| `active` \| `waiting` \| `review` \| `scheduled` \| `backlog`. |
 | `robin:project` | 0..1 | string | Project slug. |
 | `robin:category` | 0..1 | string | Free-form. |
+| `robin:kind` | 0..1 | enum | `outcome` \| `workstream` \| `task`. Hierarchy role; missing on older leaves → treat as `task`. |
+| `robin:parent` | 0..1 | string | Immediate parent task slug (workstream or outcome). Grandparent derived via parent chain. |
 | `robin:started` | 0..1 | ISO-8601 UTC | When work began. |
 | `robin:completed` | 0..1 | ISO-8601 UTC | When marked `done`. |
 | `robin:archive_reason` | 0..1 | string | Why a task was dropped/superseded/cancelled. |
@@ -56,7 +73,7 @@ These apply to all page types.
 | Tag | Cardinality | Type | Notes |
 |---|---|---|---|
 | `robin:role` | 0..1 | string | Free-form role description. |
-| `robin:relationship` | 0..1 | enum | `direct-report` \| `stakeholder` \| `external` \| `candidate`. |
+| `robin:relationship` | 0..1 | string | Lowercase kebab classification such as `direct-report`, `stakeholder`, `strategic-partner`, or `hiring-partner`. |
 | `robin:started` | 0..1 | ISO-8601 date | When the relationship began. |
 | `robin:state` | 0..1 | enum | `stable` \| `archived`. |
 
@@ -88,7 +105,7 @@ Decision filenames should be date-prefixed: `YYYY-MM-DD-<slug>.html`.
 | `robin:date` | 1 | ISO-8601 date | Meeting date. |
 | `robin:attendee` | 0..* | string | One per attendee. |
 | `robin:duration` | 0..1 | string | E.g., `"45 min"`. |
-| `robin:source` | 0..* | string | Path to the transcript. |
+| `robin:source` | 0..* | string | v0.2 path to the transcript. In v0.3 use a `meeting` or `document` kind/ref pair. |
 
 Meetings live in `logs/meetings/` (generated artifacts). The transcript stays in `inbox/meetings/` (immutable).
 
@@ -169,7 +186,6 @@ And a typical task page:
   <meta name="robin:type" content="task">
   <meta name="robin:status" content="open">
   <meta name="robin:priority" content="p2">
-  <meta name="robin:workflow" content="next">
   <meta name="robin:due" content="2026-06-15">
   <meta name="robin:owner" content="jamie">
   <meta name="robin:project" content="site-rebuild">

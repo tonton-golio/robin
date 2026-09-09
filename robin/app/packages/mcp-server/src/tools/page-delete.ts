@@ -5,37 +5,47 @@
  * archive=false: deletes permanently.
  */
 
-import * as fs from 'node:fs/promises';
-import * as fsSync from 'node:fs';
-import * as path from 'node:path';
-import { z } from 'zod/v4';
-import { resolveRef } from '../resolve.js';
-import type { ToolContext, PageDeleteOutput } from '../types.js';
+import * as fsSync from "node:fs";
+import * as path from "node:path";
+import { deleteWithHistory, moveWithHistory } from "@robin/vault-io";
+import { z } from "zod/v4";
+import { resolveRef } from "../resolve.js";
+import type { ToolContext, PageDeleteOutput } from "../types.js";
 
 export const PageDeleteInputSchema = z.object({
-  ref: z.string().min(1).describe('Slug or vault-relative path'),
-  archive: z.boolean().optional().default(true).describe('Move to archive/ instead of deleting'),
+  ref: z.string().min(1).describe("Slug or vault-relative path"),
+  archive: z.boolean().optional().default(true).describe("Move to archive/ instead of deleting"),
 });
 
 export type PageDeleteInput = z.infer<typeof PageDeleteInputSchema>;
 
 export async function pageDelete(
   input: PageDeleteInput,
-  ctx: ToolContext
+  ctx: ToolContext,
 ): Promise<PageDeleteOutput> {
   const resolved = await resolveRef(input.ref, ctx);
 
   const archive = input.archive ?? true;
 
   if (!archive) {
-    await fs.unlink(resolved.absolutePath);
+    const deleted = await deleteWithHistory({
+      vaultRoot: ctx.vaultPath,
+      absolutePath: resolved.absolutePath,
+      origin: "mcp",
+      tool: "page.delete",
+    });
+    await ctx.indexer?.refresh([deleted.path]).catch((refreshError) => {
+      console.error(
+        "Robin index refresh failed after committed page.delete:",
+        refreshError instanceof Error ? refreshError.message : String(refreshError),
+      );
+    });
     return { path: resolved.vaultRelativePath };
   }
 
   // Move to nearest sibling archive/ dir
   const dir = path.dirname(resolved.absolutePath);
-  const archiveDir = path.join(dir, 'archive');
-  await fs.mkdir(archiveDir, { recursive: true });
+  const archiveDir = path.join(dir, "archive");
 
   const filename = path.basename(resolved.absolutePath);
   // Disambiguate against an already-archived file of the same basename:
@@ -48,12 +58,23 @@ export async function pageDelete(
   while (fsSync.existsSync(archivedAbs)) {
     archivedAbs = path.join(archiveDir, `${parsedName.name}.${n++}${parsedName.ext}`);
   }
-  await fs.rename(resolved.absolutePath, archivedAbs);
-
-  const archivedRel = path.relative(ctx.vaultPath, archivedAbs);
+  const moved = await moveWithHistory({
+    vaultRoot: ctx.vaultPath,
+    fromAbsolutePath: resolved.absolutePath,
+    toAbsolutePath: archivedAbs,
+    origin: "mcp",
+    tool: "page.delete",
+    summary: "Archived page",
+  });
+  await ctx.indexer?.refresh([moved.oldPath, moved.newPath]).catch((refreshError) => {
+    console.error(
+      "Robin index refresh failed after committed page archive:",
+      refreshError instanceof Error ? refreshError.message : String(refreshError),
+    );
+  });
 
   return {
     path: resolved.vaultRelativePath,
-    archived_to: archivedRel,
+    archived_to: moved.newPath,
   };
 }

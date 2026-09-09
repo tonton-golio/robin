@@ -11,46 +11,46 @@
  *   7. Update wikilinks resolver table
  */
 
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
-import type Database from 'better-sqlite3';
-import { parseRobinHtml } from './parse-html.js';
-import { embed, serializeEmbedding } from './embeddings.js';
-import type { Tier } from './types.js';
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import type Database from "better-sqlite3";
+import { parseRobinHtml } from "./parse-html.js";
+import { embed, serializeEmbedding } from "./embeddings.js";
+import type { Tier } from "./types.js";
 
 /** Derive tier from robin:type */
 function typeToTier(type: string): Tier {
   switch (type) {
-    case 'task':
-      return 'working';
-    case 'meeting':
-    case 'interview':
-    case 'brief':
-    case 'remsleep':
-    case 'work-log':
-      return 'episodic';
-    case 'person':
-    case 'candidate':
-    case 'project':
-    case 'feature':
-    case 'knowledge':
-    case 'understanding':
-    case 'reference':
-    case 'tool':
-    case 'repo':
-    case 'decision':
-    case 'note':
-    case 'index':
-    case 'report':
-    case 'reflection':
-      return 'semantic';
-    case 'template':
-    case 'skill':
-    case 'playbook':
-      return 'procedural';
+    case "task":
+      return "working";
+    case "meeting":
+    case "interview":
+    case "brief":
+    case "remsleep":
+    case "work-log":
+      return "episodic";
+    case "person":
+    case "candidate":
+    case "project":
+    case "feature":
+    case "knowledge":
+    case "understanding":
+    case "reference":
+    case "tool":
+    case "repo":
+    case "decision":
+    case "note":
+    case "index":
+    case "report":
+    case "reflection":
+      return "semantic";
+    case "template":
+    case "skill":
+    case "playbook":
+      return "procedural";
     default:
-      return 'semantic';
+      return "semantic";
   }
 }
 
@@ -64,9 +64,7 @@ function firstMeta(val: string | string[] | undefined): string | null {
 /** Check whether the pages_vec table exists */
 export function hasVecTable(db: Database.Database): boolean {
   const row = db
-    .prepare(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='pages_vec'`
-    )
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='pages_vec'`)
     .get() as { name: string } | undefined;
   return !!row;
 }
@@ -81,37 +79,34 @@ export function hasVecTable(db: Database.Database): boolean {
 export async function indexFile(
   db: Database.Database,
   filePath: string,
-  vaultPath: string
+  vaultPath: string,
 ): Promise<void> {
-  const html = fs.readFileSync(filePath, 'utf-8');
+  const html = fs.readFileSync(filePath, "utf-8");
 
   const parsed = parseRobinHtml(html);
   const { meta, frontmatter, bodyText, wikilinkTargets } = parsed;
 
   // Derive core fields from meta
-  const slug = firstMeta(meta['robin:slug']) ?? path.basename(filePath, '.html');
-  const type = firstMeta(meta['robin:type']) ?? 'note';
+  const slug = firstMeta(meta["robin:slug"]) ?? path.basename(filePath, ".html");
+  const type = firstMeta(meta["robin:type"]) ?? "note";
   const title = document_title_from_html(html) ?? slug;
-  const summary = firstMeta(meta['robin:summary']);
-  const updated = firstMeta(meta['robin:updated']);
+  const summary = firstMeta(meta["robin:summary"]);
+  const updated = firstMeta(meta["robin:updated"]);
   // `robin:status` and `robin:state` are synonyms; tasks predominantly stamp
   // `status`, so fall back to it or status-keyed pages index with a null state.
-  const state = firstMeta(meta['robin:state']) ?? firstMeta(meta['robin:status']);
+  const state = firstMeta(meta["robin:state"]) ?? firstMeta(meta["robin:status"]);
   // Respect explicit robin:tier override, else derive from type
-  const explicitTier = firstMeta(meta['robin:tier']) as Tier | null;
+  const explicitTier = firstMeta(meta["robin:tier"]) as Tier | null;
   const tier: Tier = explicitTier ?? typeToTier(type);
 
   // Vault-relative path
   const relPath = path.relative(vaultPath, filePath);
 
   // Hash body text
-  const bodyHash = bodyText
-    ? crypto.createHash('sha256').update(bodyText).digest('hex')
-    : null;
+  const bodyHash = bodyText ? crypto.createHash("sha256").update(bodyText).digest("hex") : null;
 
   // Serialize frontmatter for storage
-  const frontmatterJson =
-    frontmatter !== null ? JSON.stringify(frontmatter) : null;
+  const frontmatterJson = frontmatter !== null ? JSON.stringify(frontmatter) : null;
 
   const now = new Date().toISOString();
 
@@ -122,10 +117,8 @@ export async function indexFile(
   // previous slug). The watcher's unlink path handles old-slug cleanup; this
   // covers the change-event path it bypasses.
   const existing = db
-    .prepare('SELECT body_hash, slug, rowid FROM pages WHERE path = ?')
-    .get(relPath) as
-    | { body_hash: string | null; slug: string; rowid: number }
-    | undefined;
+    .prepare("SELECT body_hash, slug, rowid FROM pages WHERE path = ?")
+    .get(relPath) as { body_hash: string | null; slug: string; rowid: number } | undefined;
 
   const hashChanged = !existing || existing.body_hash !== bodyHash;
 
@@ -190,25 +183,22 @@ export async function indexFile(
   // gated on non-empty body.
   if (hashChanged && hasVecTable(db)) {
     try {
-      const pageRow = db
-        .prepare('SELECT rowid FROM pages WHERE path = ?')
-        .get(relPath) as { rowid: number } | undefined;
+      const pageRow = db.prepare("SELECT rowid FROM pages WHERE path = ?").get(relPath) as
+        | { rowid: number }
+        | undefined;
 
       if (pageRow) {
         // sqlite-vec requires BigInt for rowid (unlike standard SQLite)
         const rowid = BigInt(pageRow.rowid);
 
         // Always drop the old vector first (clears it on an emptied body).
-        db.prepare('DELETE FROM pages_vec WHERE rowid = ?').run(rowid);
+        db.prepare("DELETE FROM pages_vec WHERE rowid = ?").run(rowid);
 
         if (bodyText) {
           const vec = await embed(bodyText.slice(0, 8192)); // truncate for embedding
           const vecBuf = serializeEmbedding(vec);
           // Insert the new vector
-          db.prepare('INSERT INTO pages_vec (rowid, embedding) VALUES (?, ?)').run(
-            rowid,
-            vecBuf
-          );
+          db.prepare("INSERT INTO pages_vec (rowid, embedding) VALUES (?, ?)").run(rowid, vecBuf);
         }
       }
     } catch (err) {
@@ -220,7 +210,7 @@ export async function indexFile(
   // Update links: delete old outbound links from this PATH, reinsert. Keyed by
   // from_path (unique) so a hub page's links never collapse with a same-slug
   // sibling's; from_slug is stored alongside for display + 2-hop expansion.
-  db.prepare('DELETE FROM links WHERE from_path = ?').run(relPath);
+  db.prepare("DELETE FROM links WHERE from_path = ?").run(relPath);
   const insertLink = db.prepare(`
     INSERT OR IGNORE INTO links (from_path, from_slug, to_slug, kind) VALUES (?, ?, ?, 'wikilink')
   `);
@@ -237,14 +227,48 @@ export async function indexFile(
  * remains, the resolver row is removed.
  */
 export function recomputeWikilink(db: Database.Database, slug: string): void {
-  db.prepare('DELETE FROM wikilinks WHERE slug = ?').run(slug);
-  db.prepare(`
-    INSERT INTO wikilinks (slug, path, ambiguous)
-    SELECT slug, MIN(path), CASE WHEN COUNT(*) > 1 THEN 1 ELSE 0 END
-    FROM pages
-    WHERE slug = ?
-    GROUP BY slug
-  `).run(slug);
+  const recompute = () => {
+    const resolved = db
+      .prepare(
+        `SELECT path
+           FROM pages
+          WHERE slug = ?
+          ORDER BY CASE
+            WHEN lower(path) LIKE 'archive/%'
+              OR lower(path) LIKE '%/archive/%'
+              OR lower(path) LIKE 'archives/%'
+              OR lower(path) LIKE '%/archives/%'
+              OR lower(path) LIKE 'archived/%'
+              OR lower(path) LIKE '%/archived/%'
+            THEN 1 ELSE 0 END,
+            path
+          LIMIT 1`,
+      )
+      .get(slug) as { path: string | null } | undefined;
+
+    const count = (db.prepare('SELECT COUNT(*) AS count FROM pages WHERE slug = ?').get(slug) as { count: number }).count;
+
+    if (!resolved?.path || count === 0) {
+      db.prepare("DELETE FROM wikilinks WHERE slug = ?").run(slug);
+      return;
+    }
+    db.prepare(
+      `INSERT INTO wikilinks (slug, path, ambiguous)
+       VALUES (?, ?, ?)
+       ON CONFLICT(slug) DO UPDATE SET
+         path = excluded.path,
+         ambiguous = excluded.ambiguous`,
+    ).run(slug, resolved.path, count > 1 ? 1 : 0);
+  };
+
+  // Different Next/MCP worker processes may share the same rebuildable SQLite
+  // sidecar. Serialize the resolver read+upsert across connections and avoid
+  // the old DELETE→INSERT gap that produced uniqueness errors during builds.
+  if (db.inTransaction) {
+    recompute();
+  } else {
+    db.transaction(recompute).immediate();
+  }
 }
 
 /**
@@ -257,11 +281,11 @@ function decodeHtmlEntities(s: string): string {
   return s
     .replace(/&#x([0-9a-f]+);/gi, (_m, hex) => String.fromCodePoint(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_m, dec) => String.fromCodePoint(parseInt(dec, 10)))
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&'); // last: avoid double-decoding "&amp;lt;"
+    .replace(/&amp;/g, "&"); // last: avoid double-decoding "&amp;lt;"
 }
 
 /** Extract <title> text from raw HTML without a full parse */

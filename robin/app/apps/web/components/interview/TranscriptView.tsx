@@ -3,6 +3,18 @@
 import { useEffect, useRef } from "react";
 import type { TranscriptEntry } from "@/lib/voice-client";
 
+// Static literal class tables (Tailwind v4 only emits complete literal strings,
+// so these must never be built by interpolation).
+const ACTOR_CLASS = {
+  robin: "text-[var(--blue)]",
+  you: "text-[var(--muted)]",
+} as const;
+
+const BUBBLE_CLASS = {
+  robin: "rounded-tl-sm bg-[var(--card-2)]",
+  you: "rounded-tr-sm border border-[color-mix(in_srgb,var(--blue)_25%,transparent)] bg-[var(--accent-wash)]",
+} as const;
+
 interface Props {
   entries: TranscriptEntry[];
   /** True once a session is connecting/live — changes the empty-state copy. */
@@ -40,7 +52,7 @@ export default function TranscriptView({ entries, isLive = false }: Props) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center px-6">
         <div
-          className={`mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-500/30 bg-violet-500/10 ${
+          className={`mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--radius-xl)] border border-[color-mix(in_srgb,var(--blue)_30%,transparent)] bg-[var(--accent-wash)] ${
             isLive ? "animate-pulse" : ""
           }`}
         >
@@ -49,7 +61,8 @@ export default function TranscriptView({ entries, isLive = false }: Props) {
             height="26"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgb(165 180 252)"
+            className="text-[var(--blue)]"
+            stroke="currentColor"
             strokeWidth="1.6"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -62,18 +75,18 @@ export default function TranscriptView({ entries, isLive = false }: Props) {
         </div>
         {isLive ? (
           <>
-            <p className="text-sm font-medium text-slate-200">Listening…</p>
-            <p className="mt-1 max-w-xs text-xs text-slate-500">
+            <p className="text-sm font-medium text-[var(--ink)]">Listening…</p>
+            <p className="mt-1 max-w-xs text-xs text-[var(--muted)]">
               The interviewer is warming up. It will introduce itself and ask the first
               question — just start talking when you&apos;re ready.
             </p>
           </>
         ) : (
           <>
-            <p className="text-sm font-medium text-slate-200">Ready when you are</p>
-            <p className="mt-1 max-w-xs text-xs text-slate-500">
+            <p className="text-sm font-medium text-[var(--ink)]">Ready when you are</p>
+            <p className="mt-1 max-w-xs text-xs text-[var(--muted)]">
               Pick a brief, hit{" "}
-              <span className="font-medium text-violet-300">Start</span>, and allow
+              <span className="font-medium text-[var(--blue)]">Start</span>, and allow
               microphone access. The conversation appears here as you speak.
             </p>
           </>
@@ -93,29 +106,20 @@ export default function TranscriptView({ entries, isLive = false }: Props) {
               className={`flex flex-col gap-1 ${isAi ? "items-start" : "items-end"}`}
             >
               <span
-                className="px-1 text-[10px] font-semibold uppercase tracking-wider"
-                style={{ color: isAi ? "rgb(165,180,252)" : "rgb(110,231,183)" }}
+                className={`px-1 text-[11px] font-semibold uppercase tracking-[0.06em] ${
+                  isAi ? ACTOR_CLASS.robin : ACTOR_CLASS.you
+                }`}
               >
                 {isAi ? "Robin" : "You"}
               </span>
               <div
-                className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-                  isAi
-                    ? "rounded-tl-sm bg-white/5 text-slate-100"
-                    : "rounded-tr-sm text-emerald-50"
+                className={`max-w-[85%] rounded-[var(--radius-lg)] px-3.5 py-2 text-sm leading-relaxed text-[var(--ink)] ${
+                  isAi ? BUBBLE_CLASS.robin : BUBBLE_CLASS.you
                 }`}
-                style={
-                  isAi
-                    ? undefined
-                    : {
-                        background: "rgba(16,185,129,0.16)",
-                        border: "1px solid rgba(16,185,129,0.25)",
-                      }
-                }
               >
                 {entry.text}
                 {entry.partial && (
-                  <span className="ml-1 inline-block animate-pulse text-violet-400">▌</span>
+                  <span className="ml-1 inline-block animate-pulse text-[var(--blue)]">▌</span>
                 )}
               </div>
             </li>

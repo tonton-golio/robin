@@ -17,13 +17,17 @@ const SMOOTH_DOWN = 0.18; // how fast it falls back when audio quiets
 
 interface Props {
   analyser: AnalyserNode | null;
-  /** Tailwind/CSS color for active bars. Defaults to violet. */
+  /** CSS color for active bars. Defaults to the Quiet Slate accent. */
   color?: string;
   /** Pixel height of the meter. Defaults to 64. */
   height?: number;
 }
 
-export default function VoiceBars({ analyser, color = "rgb(167 139 250)", height = 64 }: Props) {
+// Idle bars sit at a token-derived neutral so the meter reads as "off" in both
+// themes (a fixed slate would disappear on --paper in light).
+const IDLE_BAR = "color-mix(in srgb, var(--ink) 12%, transparent)";
+
+export default function VoiceBars({ analyser, color = "var(--blue)", height = 64 }: Props) {
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const targets = useRef<Float32Array>(new Float32Array(BAR_COUNT));
   const rafRef = useRef<number | null>(null);
@@ -82,7 +86,7 @@ export default function VoiceBars({ analyser, color = "rgb(167 139 250)", height
           className="w-1 rounded-full origin-center"
           style={{
             height: "100%",
-            background: active ? color : "rgb(51 65 85)",
+            background: active ? color : IDLE_BAR,
             boxShadow: active ? `0 0 6px ${color}` : "none",
             transform: `scaleY(${baseline(i)})`,
             transition: "background 0.3s, box-shadow 0.3s",

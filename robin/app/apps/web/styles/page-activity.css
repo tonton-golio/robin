@@ -1,0 +1,1171 @@
+/* Robin page styles — activity. Owner: activity page. "Quiet Slate" v2.
+   The agent ledger: edits + comments + sessions + ingest in one lensed surface.
+   Dense list surface: rows separate with --hairline, panels are --card + soft
+   elevation (a surface gets a border OR a shadow, never both), micro-labels go
+   through --lab-*. Selected/active never inverts to an ink brick: it is
+   --accent-wash + an inset accent spine. Red is overdue/destructive only and
+   prefers --red-wash + --red text. Caps + --lab-track are for eyebrows and
+   section labels only: action buttons (since/expand-all/clear/row actions) read
+   as sentence case with letter-spacing 0, like .r-btn. Mono meta lines are sized
+   with --meta-size. Tokens only, no hardcoded colour. */
+
+.act-page {
+  padding: 24px 26px 96px;
+  max-width: 1080px;
+  width: 100%;
+}
+
+/* ── load error ─────────────────────────────────────────────────────── */
+.act-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--red-wash);
+  border-radius: var(--radius);
+  box-shadow: inset 3px 0 0 var(--red);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.act-error-pill {
+  background: transparent;
+  color: var(--red);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+/* ── lens tabs: quiet micro-labels; the active lens is a wash + accent
+   underline rather than a filled block ─────────────────────────────── */
+.act-lenses {
+  display: flex;
+  gap: 2px;
+  margin: 16px 0 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.act-lens {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 9px 16px 8px;
+  cursor: pointer;
+}
+.act-lens:hover {
+  color: var(--ink);
+}
+.act-lens[aria-selected='true'],
+.act-lens.is-active {
+  background: var(--accent-wash);
+  color: var(--blue);
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+.act-lens-cnt {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  margin-left: 7px;
+  color: var(--muted);
+}
+.act-lens-key {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-left: 7px;
+}
+/* on a selected lens the ground is --accent-wash, where --muted is only
+   4.20:1 light / 4.09:1 dark - resolve against the real ground (spec 7.5) */
+.act-lens[aria-selected='true'] .act-lens-cnt,
+.act-lens.is-active .act-lens-cnt,
+.act-lens[aria-selected='true'] .act-lens-key,
+.act-lens.is-active .act-lens-key {
+  color: var(--ink);
+}
+
+/* ── broken-log strip ───────────────────────────────────────────────── */
+.act-broken {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--red-wash);
+  border-radius: var(--radius);
+  box-shadow: inset 3px 0 0 var(--red);
+  padding: 10px 14px;
+  margin-top: 18px;
+  font-size: 12px;
+}
+.act-broken-pill {
+  background: transparent;
+  color: var(--red);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: 999px;
+  padding: 2px 9px;
+  flex: none;
+}
+.act-broken-link {
+  padding: 5px 10px;
+  font-size: var(--lab-size);
+}
+
+/* ── since-you-last-looked: the marked moment. A level-2 card with an accent
+   left rule, not a full-bleed colour field ─────────────────────────── */
+.act-since {
+  background: var(--card);
+  color: var(--ink);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius);
+  margin: 22px 0 0;
+  padding: 16px 18px 14px;
+  box-shadow: var(--offset);
+  position: relative;
+}
+.act-since-reg {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: var(--lab-size);
+  color: var(--muted);
+}
+.act-since-t {
+  font-weight: 650;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.act-since-m {
+  color: var(--muted);
+  margin-top: 6px;
+}
+.act-since-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.act-since-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: 0;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.act-since-btn:hover {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-since--seen {
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  border-left: none;
+  border: 1px dashed var(--hairline);
+  padding: 10px 14px;
+}
+.act-since--seen .act-since-m {
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ── scope chip ─────────────────────────────────────────────────────── */
+.act-scopechip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0 0;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 9px 12px;
+  font-size: var(--meta-size);
+}
+.act-scopechip b {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+}
+.act-scopechip-x {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.act-scopechip-x:hover {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+
+/* ── filters ────────────────────────────────────────────────────────── */
+.act-filters {
+  margin: 20px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.act-fgroup {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.act-flabel {
+  width: 64px;
+  flex: none;
+  color: var(--muted);
+  font-size: var(--lab-size);
+}
+.act-fpill {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.act-fpill:hover {
+  color: var(--ink);
+}
+.act-fpill[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-fpill-cnt {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+  /* inherits the pill's own colour; opacity .7 measured 2.74:1 (spec 10a) */
+}
+.act-fclear {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 5px 0 4px;
+}
+.act-fclear:hover {
+  color: var(--ink);
+}
+
+/* ── countline ──────────────────────────────────────────────────────── */
+.act-countline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--hairline);
+  margin: 22px 0 0;
+  padding-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── ledger day/session ─────────────────────────────────────────────── */
+.act-daybar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 28px 0 0;
+}
+.act-daybar::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+  align-self: center;
+}
+.act-daybar-m {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.act-gaprow {
+  text-align: center;
+  padding: 14px 0;
+  border-bottom: 1px dashed var(--hairline);
+  margin-top: 12px;
+}
+.act-session {
+  border-left: 1px solid var(--hairline);
+  margin: 16px 0 0 6px;
+  padding: 0 0 4px 16px;
+}
+.act-shead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 0 6px;
+}
+.act-stime {
+  font-weight: 650;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.act-origin {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+}
+.act-origin--robin {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-origin--human {
+  background: transparent;
+  color: var(--ink);
+}
+.act-stool {
+  color: var(--muted);
+}
+.act-expall {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: 0;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.act-expall:hover {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-sn {
+  margin-left: auto;
+}
+
+/* ── ledger row: hairline separators; the selected row rises to level 2 and
+   carries an accent spine (never an ink fill) ──────────────────────── */
+.act-lrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border-bottom: 1px solid var(--hairline);
+  padding: 11px 8px 10px;
+  position: relative;
+  outline: none;
+}
+.act-lrow:hover {
+  background: var(--card);
+}
+.act-lrow[aria-selected='true'] {
+  background: var(--card);
+  border-bottom-color: transparent;
+  border-radius: var(--radius);
+  box-shadow: var(--offset), inset 2px 0 0 var(--blue);
+  z-index: 1;
+}
+/* focus is its own signal: an accent ring, never only a surface change */
+.act-lrow:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+  z-index: 1;
+}
+.act-unseen::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: -1px;
+  width: 3px;
+  background: var(--blue);
+}
+.act-lrow-body {
+  min-width: 0;
+}
+.act-lrow-title {
+  font-weight: 650;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.act-lrow-title a {
+  color: inherit;
+  text-decoration: none;
+}
+.act-lrow-title a:hover {
+  text-decoration: underline;
+}
+.act-lrow-path {
+  font-size: var(--meta-size);
+  color: var(--muted);
+}
+.act-lrow-summary {
+  font-size: 12px;
+  color: var(--ink);
+  margin-top: 3px;
+  max-width: 72ch;
+}
+.act-lrow-prov {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.act-lrow-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 1px;
+}
+.act-dstat {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* kind pills: 999px micro-labels, wash fills only */
+.act-pill {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.act-pill--created {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-pill--edited {
+  background: transparent;
+}
+.act-pill--reverted {
+  background: transparent;
+  border-style: dashed;
+}
+.act-pill--deleted {
+  background: var(--red-wash);
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.act-pill--ingest {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+
+/* row action strip — revealed on focus */
+.act-lrow-actions,
+.act-crow-actions {
+  display: none;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.act-lrow:focus-visible .act-lrow-actions,
+.act-lrow[aria-selected='true'] .act-lrow-actions,
+.act-lrow:focus-within .act-lrow-actions,
+.act-crow:focus-visible .act-crow-actions,
+.act-crow[aria-selected='true'] .act-crow-actions,
+.act-crow:focus-within .act-crow-actions {
+  display: flex;
+}
+.act-rowbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: var(--lab-weight);
+  letter-spacing: 0;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+}
+.act-rowbtn:hover {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-rowbtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.act-rowbtn--danger {
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  color: var(--red);
+}
+.act-rowbtn--danger:hover {
+  background: var(--red-wash);
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.act-rowbtn-key {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+/* hover swaps the ground to --accent-wash, where --muted is 4.20:1 light /
+   4.09:1 dark - the keycap goes to --ink there (spec 7.5) */
+.act-rowbtn:hover .act-rowbtn-key {
+  color: var(--ink);
+}
+.act-rowbtn-err {
+  color: var(--red);
+}
+.act-rowbtn-done {
+  color: var(--blue);
+  margin-left: 6px;
+}
+
+/* diff panel: nested level-1 surface, hairline internal rules */
+.act-diff-wrap {
+  grid-column: 1 / -1;
+}
+.act-diff {
+  margin-top: 10px;
+  background: var(--card-2);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  overflow: hidden;
+}
+.act-diff-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--hairline);
+  padding: 6px 10px;
+}
+.act-diff-pre {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  line-height: 1.55;
+  white-space: pre;
+}
+.act-diff-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--hairline);
+}
+.act-diff-error {
+  margin: 8px 0 0;
+  color: var(--red);
+}
+/* wash fill + same-hue text; the tint stays light enough for --good to keep
+   4.5:1 on --card-2 in light as well as dark */
+.r-diff-add {
+  display: block;
+  background: color-mix(in srgb, var(--good) 7%, transparent);
+  color: var(--good);
+}
+.r-diff-del {
+  display: block;
+  background: var(--red-wash);
+  color: var(--red);
+  text-decoration: line-through;
+}
+.r-diff-ctx {
+  display: block;
+  color: var(--muted);
+}
+.r-diff-hunk {
+  display: block;
+  color: var(--blue);
+}
+.r-diff-meta {
+  display: block;
+  color: var(--muted);
+}
+
+/* undo confirm panel: destructive intent reads as a red wash, not a red box */
+.act-undo {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  background: var(--red-wash);
+  border-radius: var(--radius);
+  box-shadow: inset 3px 0 0 var(--red);
+  padding: 12px 14px;
+}
+.act-undo-title {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--red);
+}
+.act-undo p {
+  font-size: 12px;
+  margin: 8px 0;
+  max-width: 66ch;
+}
+.act-undo-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.act-undo-confirm,
+.act-undo .r-btn {
+  padding: 6px 12px;
+  font-size: var(--lab-size);
+}
+
+/* burst fold + load more */
+.act-burstexpand {
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px 7px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  margin-top: 2px;
+}
+.act-burstexpand:hover {
+  background: var(--card-2);
+}
+.act-burstexpand-n {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 7px;
+  margin-right: 8px;
+}
+.act-loadmore {
+  margin: 30px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* ── comments lens ──────────────────────────────────────────────────── */
+.act-csection {
+  margin: 26px 0 0;
+}
+.act-csection > .r-bar {
+  display: inline-block;
+  margin-bottom: 4px;
+}
+.act-cpage {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  margin: 14px 0 0;
+}
+.act-cphead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--hairline);
+  padding: 9px 12px;
+}
+.act-cphead-t {
+  font-weight: 650;
+  font-size: 13px;
+}
+.act-cphead-p {
+  color: var(--muted);
+}
+.act-cpage-pill {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  padding: 2px 9px;
+}
+.act-cphead-open {
+  margin-left: auto;
+}
+.act-crow {
+  border-bottom: 1px solid var(--hairline);
+  padding: 11px 12px 10px;
+  position: relative;
+  outline: none;
+}
+.act-crow:last-child {
+  border-bottom-color: transparent;
+}
+.act-crow:hover {
+  background: var(--card);
+}
+.act-crow[aria-selected='true'] {
+  background: var(--card);
+  border-bottom-color: transparent;
+  border-radius: var(--radius);
+  box-shadow: var(--offset), inset 2px 0 0 var(--blue);
+  z-index: 1;
+}
+.act-crow:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+  z-index: 1;
+}
+.act-crow-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.act-cpill {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+}
+.act-cpill--needs {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-cpill--open {
+  background: transparent;
+  color: var(--ink);
+}
+.act-cpill--resolved {
+  background: transparent;
+  border-style: dashed;
+  color: var(--muted);
+}
+.act-cpill--rejected {
+  background: var(--red-wash);
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.act-cpill--kind {
+  background: transparent;
+  border-style: dashed;
+  color: var(--muted);
+}
+.act-crow-loc {
+  color: var(--muted);
+}
+.act-crow-stale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 2px 8px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+}
+.act-crow-stale:hover {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.act-crow-text {
+  font-size: 13px;
+  margin-top: 7px;
+  max-width: 72ch;
+}
+.act-crow-quote {
+  margin: 8px 0 0;
+  padding: 4px 0 4px 12px;
+  border-left: 3px solid var(--blue);
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 66ch;
+}
+.act-crow-res {
+  font-size: 12px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--card-2);
+  border-radius: var(--radius-sm);
+  max-width: 72ch;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.act-crow-res b {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+}
+.act-crow-prov {
+  margin-top: 7px;
+}
+.act-cactions-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.act-cactions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.act-resolveform {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* inputs keep a real 1px --line border (a structural case) + small radius */
+.act-resolveform input {
+  flex: 1;
+  min-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 7px 10px;
+  outline: none;
+}
+.act-resolveform input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.act-resolveform .r-btn,
+.act-rejectconfirm .r-btn {
+  padding: 6px 12px;
+  font-size: var(--lab-size);
+}
+.act-rejectconfirm {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--red-wash);
+  border-radius: var(--radius);
+  box-shadow: inset 3px 0 0 var(--red);
+  padding: 8px 10px;
+  font-size: var(--meta-size);
+}
+
+/* ── sessions lens ──────────────────────────────────────────────────── */
+.act-todayblock {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset);
+  margin: 22px 0 0;
+  padding: 16px 18px;
+}
+.act-todayhead {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.act-todaystepped {
+  font-size: 22px;
+}
+.act-todayhead-right {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.act-todayhead-right .r-btn {
+  padding: 8px 14px;
+  font-size: var(--lab-size);
+}
+.act-srow {
+  display: grid;
+  grid-template-columns: 96px 84px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--hairline);
+  padding: 9px 6px 8px;
+  text-decoration: none;
+  color: var(--ink);
+  outline: none;
+}
+.act-srow:hover {
+  background: var(--card);
+}
+.act-srow[aria-selected='true'] {
+  background: var(--card);
+  border-bottom-color: transparent;
+  border-radius: var(--radius);
+  box-shadow: var(--offset), inset 2px 0 0 var(--blue);
+  position: relative;
+  z-index: 1;
+}
+.act-srow:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+  position: relative;
+  z-index: 1;
+}
+.act-srow-date {
+  font-weight: 650;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.act-srow-pill {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  padding: 2px 9px;
+  justify-self: start;
+}
+.act-srow-pill--live {
+  background: var(--red-wash);
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.act-srow-title {
+  font-size: 13px;
+  font-weight: 650;
+  min-width: 0;
+}
+.act-srow-sm {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 3px;
+}
+.act-srow-open {
+  color: var(--muted);
+}
+.act-srow--live {
+  display: grid;
+}
+.act-liveblink {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  margin-right: 6px;
+  animation: act-blink 1.2s steps(2) infinite;
+}
+@keyframes act-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.act-today-outcomes {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+.act-today-empty {
+  margin: 10px 0 0;
+}
+.act-monthbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0 0;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+}
+.act-monthbar::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+.act-monthbar-m {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.act-monthbody {
+  margin-top: 8px;
+}
+
+/* ── statebox (empty/healthy) ───────────────────────────────────────── */
+.act-statebox {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset);
+  padding: 26px 28px;
+  margin-top: 30px;
+  max-width: 640px;
+}
+.act-statebox--flat {
+  box-shadow: var(--offset-sm);
+  padding: 18px 20px;
+}
+.act-statebox-t {
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  margin: 12px 0 6px;
+}
+.act-statebox p {
+  font-size: 13px;
+  max-width: 56ch;
+  margin: 6px 0;
+}
+
+/* ── raw footer ─────────────────────────────────────────────────────── */
+.act-rawfoot {
+  margin: 44px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.act-rawlink {
+  color: var(--muted);
+  text-decoration: none;
+}
+.act-rawlink:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* ── skeleton (loading) ─────────────────────────────────────────────── */
+.act-skel-list {
+  margin-top: 22px;
+}
+.act-skel-row {
+  border-bottom: 1px solid var(--hairline);
+  padding: 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.act-skel .sk {
+  background: var(--ink);
+  opacity: 0.1;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  animation: act-pulse 1.2s ease-in-out infinite;
+}
+.sk-title {
+  width: 40%;
+}
+.sk-line {
+  width: 70%;
+}
+.sk-mono {
+  width: 30%;
+  height: 10px;
+}
+@keyframes act-pulse {
+  0%,
+  100% {
+    opacity: 0.08;
+  }
+  50% {
+    opacity: 0.18;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .act-skel .sk,
+  .act-liveblink {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .act-page {
+    padding: 18px 14px 96px;
+  }
+  .act-lrow {
+    grid-template-columns: 1fr;
+  }
+  .act-lrow-side {
+    flex-direction: row;
+    align-items: center;
+  }
+  .act-srow {
+    grid-template-columns: 1fr auto;
+  }
+  .act-srow-title {
+    grid-column: 1 / -1;
+  }
+}

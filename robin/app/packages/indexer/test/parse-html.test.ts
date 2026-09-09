@@ -14,7 +14,7 @@ import { parseRobinHtml } from '../src/parse-html.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Path to the golden test file in the converter package
-const GOLDEN_APE = path.resolve(
+const GOLDEN_PROJECT = path.resolve(
   __dirname,
   '../../converter/test/golden/04-project.expected.html'
 );
@@ -256,7 +256,7 @@ describe('parseRobinHtml — golden file 03-brain-index', () => {
 });
 
 describe('parseRobinHtml — golden file 04-project (project with tags)', () => {
-  const html = fs.readFileSync(GOLDEN_APE, 'utf-8');
+  const html = fs.readFileSync(GOLDEN_PROJECT, 'utf-8');
 
   it('extracts slug "04-project"', () => {
     const parsed = parseRobinHtml(html);
@@ -278,12 +278,12 @@ describe('parseRobinHtml — golden file 04-project (project with tags)', () => 
   it('extracts many wikilink targets', () => {
     const parsed = parseRobinHtml(html);
     expect(parsed.wikilinkTargets.length).toBeGreaterThan(10);
-    expect(parsed.wikilinkTargets).toContain('jordan-lee');
+    expect(parsed.wikilinkTargets).toContain('rosemary');
   });
 
   it('has long bodyText containing key phrases', () => {
     const parsed = parseRobinHtml(html);
     expect(parsed.bodyText.length).toBeGreaterThan(200);
-    expect(parsed.bodyText).toContain('Beacon');
+    expect(parsed.bodyText).toContain('Seed exchange');
   });
 });

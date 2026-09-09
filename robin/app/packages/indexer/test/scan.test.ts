@@ -52,7 +52,9 @@ describe('scan() — ghost-row prune', () => {
 
   beforeEach(() => {
     vault = fs.mkdtempSync(path.join(os.tmpdir(), 'robin-scan-'));
-    fs.mkdirSync(path.join(vault, 'brain'), { recursive: true });
+    for (const root of ['brain', 'logs/meetings', 'logs/reports', 'out']) {
+      fs.mkdirSync(path.join(vault, root), { recursive: true });
+    }
     db = openInMemoryDb();
   });
 
@@ -121,5 +123,31 @@ describe('scan() — ghost-row prune', () => {
     expect(res.pruned).toBe(0);
     expect(pageCount(db, 'a')).toBe(1);
     expect(pageCount(db, 'b')).toBe(1);
+  });
+
+  it('indexes canonical meeting/report HTML while ignoring raw log markdown', async () => {
+    write('logs/meetings/standup.html', 'standup');
+    write('logs/reports/weekly.html', 'weekly');
+    fs.writeFileSync(path.join(vault, 'logs', 'meetings', 'raw.md'), '# transcript');
+    fs.writeFileSync(path.join(vault, 'logs', 'reports', 'notes.txt'), 'raw report');
+
+    const result = await scan(db, vault, false, 8);
+
+    expect(result.indexed).toBe(2);
+    expect(db.prepare("SELECT path FROM pages ORDER BY path").all()).toEqual([
+      { path: 'logs/meetings/standup.html' },
+      { path: 'logs/reports/weekly.html' },
+    ]);
+  });
+
+  it('keeps archived history indexed but resolves a slug to the current page', async () => {
+    fs.mkdirSync(path.join(vault, 'logs', 'meetings', 'archive'), { recursive: true });
+    write('logs/meetings/archive/standup.html', 'standup');
+    write('logs/meetings/standup.html', 'standup');
+
+    await scan(db, vault, false, 8);
+
+    expect(pageCount(db, 'standup')).toBe(2);
+    expect(wikilinkRow(db, 'standup')).toEqual({ path: 'logs/meetings/standup.html' });
   });
 });

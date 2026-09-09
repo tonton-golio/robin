@@ -191,6 +191,45 @@ html[data-robin-embed] .nav { display: none !important; }
 tr.ph-row td { background: var(--placeholder-bg); }
 tr.ph-row td:first-child { border-left: 3px solid var(--placeholder); }
 
+/* ── Progress bar (standalone only; the viewer chrome supplies its own counter) ── */
+.deck-progress {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--rule); z-index: 90;
+}
+.deck-progress > i {
+  display: block; height: 100%; width: 0;
+  background: var(--signal);
+  transition: width .28s cubic-bezier(.4, 0, .2, 1);
+}
+html[data-robin-embed] .deck-progress { display: none !important; }
+
+/* ── ?edit direct-manipulation chrome (selection box, resize handles, snap guides) ──
+   Injected only in the standalone deck editor (robin-deck-edit.js). Fixed-position
+   overlays tracked to the selected element in viewport coords; the box itself is
+   click-through so text under it stays editable, only the handles capture pointers. */
+.ed-selbox {
+  position: fixed; z-index: 1002; pointer-events: none;
+  border: 1.5px solid var(--signal);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .55);
+}
+.ed-handle {
+  position: absolute; width: 10px; height: 10px; pointer-events: auto;
+  background: #fff; border: 1.5px solid var(--signal); border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+}
+.ed-h-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.ed-h-n  { left: calc(50% - 5px); top: -5px; cursor: ns-resize; }
+.ed-h-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.ed-h-e  { right: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+.ed-h-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.ed-h-s  { left: calc(50% - 5px); bottom: -5px; cursor: ns-resize; }
+.ed-h-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.ed-h-w  { left: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+.ed-guide { position: fixed; z-index: 1002; pointer-events: none; background: #ff2d55; }
+.ed-guide.v { width: 1px; }
+.ed-guide.h { height: 1px; }
+@media print { .ed-selbox, .ed-guide { display: none !important; } }
+
 /* ── Print / PDF export ──
    One slide per printed page, landscape. The Robin artifact viewer prints the
    deck via iframe.contentWindow.print(); these rules must win even when the
@@ -207,7 +246,7 @@ tr.ph-row td:first-child { border-left: 3px solid var(--placeholder); }
     padding: 0 !important;
     margin: 0 !important;
   }
-  .nav { display: none !important; }
+  .nav, .deck-progress { display: none !important; }
   .deck,
   html[data-robin-embed] .deck {
     width: var(--deck-w) !important;

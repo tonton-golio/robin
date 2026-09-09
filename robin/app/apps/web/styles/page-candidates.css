@@ -1,0 +1,475 @@
+/* Robin page styles — candidates. Owner: candidates page. "Quiet Slate" v2.
+   Hiring pipeline tracker: a kanban board and a sortable table over one manual
+   snapshot of Workable. Every rule here is scoped under .cand-page.
+
+   System notes: surfaces separate by elevation, never by a border plus a shadow
+   (columns and cards are --card / --card-2 + --offset-sm). The active tab and
+   the selected sort are --accent-wash + an inset accent spine, never an ink
+   brick. Rows separate with --hairline; --line appears only under the table
+   header. Micro-labels go through --lab-*; 11px is the floor and no text is
+   tiered with opacity — exactly two tiers, --ink and --muted. Numeric columns
+   are tabular-nums and right-aligned. Tokens only, no hardcoded colour. */
+
+/*
+ * Full width by design: the board wants every column it can show before it
+ * has to scroll, and the table has six columns. No max-width cap here.
+ */
+.cand-page {
+  padding: 24px 26px 96px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* the system-of-record escape hatch, as a header action */
+.cand-page .cand-open {
+  text-decoration: none;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* the footer's challenge-platform link */
+.cand-page .cand-src {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.cand-page .cand-src:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ── summary strip ──────────────────────────────────────────────────── */
+.cand-sum {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 4px;
+}
+@media (max-width: 980px) {
+  .cand-sum {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .cand-sum {
+    grid-template-columns: 1fr;
+  }
+}
+.cand-stat {
+  background: var(--card);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 12px 14px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.cand-stat-n {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.cand-stat-l {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+}
+
+/* ── view tabs: wash + accent underline, never a filled block ───────── */
+.cand-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 18px 0 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.cand-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 9px 16px 8px;
+  cursor: pointer;
+}
+.cand-tab:hover {
+  color: var(--ink);
+}
+.cand-tab[aria-selected='true'],
+.cand-tab.is-active {
+  background: var(--accent-wash);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+.cand-tab:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ── board ──────────────────────────────────────────────────────────── */
+/*
+ * One row, one column per stage, however many stages there are — a wrapped
+ * kanban column lands a screen or more below the fold and reads as missing.
+ * The board scrolls horizontally inside itself; the page body never does.
+ */
+.cand-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(250px, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 8px;
+}
+.cand-col {
+  min-width: 0;
+}
+.cand-colhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cand-colcount {
+  font-size: var(--lab-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.cand-cards {
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 10px;
+}
+.cand-colempty {
+  margin: 0;
+  padding: 6px 2px;
+  font-size: var(--lab-size);
+  color: var(--muted);
+}
+
+/* ── card ───────────────────────────────────────────────────────────── */
+.cand-card {
+  background: var(--card-2);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 12px 12px 11px;
+  transition: box-shadow 120ms ease;
+}
+.cand-card:hover {
+  box-shadow: var(--offset);
+}
+.cand-name {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.cand-await {
+  margin: 0 0 7px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.cand-dates {
+  margin: 0 0 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cand-dk {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+}
+.cand-dv {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.cand-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ── chips: owner + flag. 999px, wash-not-fill, --lab-* label ───────── */
+.cand-owner,
+.cand-flag {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+}
+.cand-owner.is-human {
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  background: var(--accent-wash);
+  color: var(--blue-deep);
+}
+.cand-owner.is-candidate {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink);
+}
+.cand-owner.is-closed {
+  border-style: dashed;
+  color: var(--muted);
+}
+.cand-owner.is-other {
+  color: var(--muted);
+}
+.cand-flag.is-good {
+  border-color: color-mix(in srgb, var(--good) 40%, transparent);
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  color: var(--good);
+}
+.cand-flag.is-accent {
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  background: var(--accent-wash);
+  color: var(--blue-deep);
+}
+.cand-flag.is-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+}
+.cand-flag.is-bad {
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  background: var(--red-wash);
+  color: var(--red);
+}
+.cand-flag.is-neutral {
+  color: var(--muted);
+}
+
+/* ── notes: an expandable second line, not a title attribute ────────── */
+.cand-notes {
+  margin-top: 8px;
+}
+.cand-notes > summary {
+  cursor: pointer;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+  list-style: none;
+}
+.cand-notes > summary::-webkit-details-marker {
+  display: none;
+}
+.cand-notes > summary::before {
+  content: '+ ';
+}
+.cand-notes[open] > summary::before {
+  content: '– ';
+}
+.cand-notes > summary:hover {
+  color: var(--ink);
+}
+.cand-notes > summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.cand-notes > p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 78ch;
+}
+
+/* ── table ──────────────────────────────────────────────────────────── */
+.cand-tablewrap {
+  margin-top: 16px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 6px 10px 10px;
+  overflow-x: auto;
+}
+.cand-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.cand-caption {
+  caption-side: top;
+  text-align: left;
+  padding: 8px 4px 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.cand-table th {
+  text-align: left;
+  padding: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+}
+.cand-table th.cand-num {
+  text-align: right;
+}
+.cand-sortbtn {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+  padding: 7px 10px 6px;
+  cursor: pointer;
+  width: 100%;
+  text-align: inherit;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.cand-sortbtn:hover {
+  color: var(--ink);
+}
+.cand-sortbtn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.cand-table th[aria-sort='ascending'] .cand-sortbtn,
+.cand-table th[aria-sort='descending'] .cand-sortbtn {
+  background: var(--accent-wash);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+.cand-sortmark {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.cand-table th[aria-sort='ascending'] .cand-sortmark,
+.cand-table th[aria-sort='descending'] .cand-sortmark {
+  color: var(--blue);
+}
+.cand-table td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 8px 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  vertical-align: top;
+}
+.cand-table td.cand-num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cand-row:hover td {
+  background: var(--card-2);
+}
+.cand-rowname {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin-right: 7px;
+}
+.cand-await-cell {
+  color: var(--muted);
+  min-width: 20ch;
+}
+.cand-dk-inline {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-sans);
+}
+
+/* ── footer provenance ──────────────────────────────────────────────── */
+.cand-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── skeleton ───────────────────────────────────────────────────────── */
+.cand-skel-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+@media (max-width: 980px) {
+  .cand-skel-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .cand-skel-board {
+    grid-template-columns: 1fr;
+  }
+}
+.cand-skel-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cand-page .sk {
+  background: var(--card-2);
+  border-radius: var(--radius);
+  animation: cand-pulse 1.5s ease-in-out infinite;
+}
+.cand-page .sk-head {
+  height: 16px;
+  width: 55%;
+}
+.cand-page .sk-card {
+  height: 78px;
+  box-shadow: var(--offset-sm);
+}
+@keyframes cand-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cand-page .sk {
+    animation: none;
+  }
+}

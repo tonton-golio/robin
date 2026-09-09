@@ -39,20 +39,6 @@ open → in-progress → done
 - **`superseded`** — replaced by another task; set `robin:superseded_by`.
 - **`cancelled`** — never going to happen; document why.
 
-## Workflow (separate from status)
-
-| Workflow | Meaning |
-|---|---|
-| `inbox` | Captured but not triaged. |
-| `next` | Ready to pick up. |
-| `active` | Currently being worked. |
-| `waiting` | Waiting on someone or something. |
-| `review` | Work done, needs review. |
-| `scheduled` | Known future work. |
-| `backlog` | Intentionally not near-term. |
-
-Status answers "is this done?" Workflow answers "where in the queue is this?"
-
 ## Frontmatter contract
 
 Required:
@@ -69,7 +55,6 @@ Preferred (almost always):
 
 ```html
 <meta name="robin:priority" content="p2">
-<meta name="robin:workflow" content="next">
 <meta name="robin:owner" content="{{USER_NAME}}">
 <meta name="robin:project" content="some-project-slug">
 <meta name="robin:source" content="manual">
@@ -80,6 +65,8 @@ Optional (used when relevant):
 ```html
 <meta name="robin:due" content="2026-06-15">
 <meta name="robin:category" content="bug-fix">
+<meta name="robin:kind" content="task">
+<meta name="robin:parent" content="ws-example-workstream">
 <meta name="robin:started" content="…">
 <meta name="robin:completed" content="…">
 <meta name="robin:archive_reason" content="dropped because…">
@@ -90,6 +77,16 @@ Optional (used when relevant):
 <meta name="robin:acceptance" content="Tests pass; deploy is green.">
 <meta name="robin:sensitivity" content="private">
 ```
+
+### Hierarchy
+
+| `robin:kind` | Role | `robin:parent` |
+|---|---|---|
+| `outcome` | Grandparent theme / delivery gate | omit |
+| `workstream` | Parent epic | outcome slug |
+| `task` | Actionable leaf (default if omitted) | workstream slug |
+
+Grandparent is derived (`parent(parent(task))`). Max depth 3. `depends_on` / `blocked_by` stay separate from membership.
 
 **Critical:** never use `<meta name="robin:state">` for tasks. Tasks use `status`. The skills that surface tasks filter on `status`. Using `state` makes a task invisible.
 
@@ -121,7 +118,6 @@ Use `/create-task`. The skill encodes:
 
 - Default priority (`p2` unless specified).
 - Default owner ({{USER_NAME}}).
-- Default workflow (`next`).
 - Default source (`manual`).
 - Slug derivation from title.
 - Side effects: page created, `logs/changelog.md` appended.

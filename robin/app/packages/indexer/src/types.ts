@@ -50,6 +50,27 @@ export interface IndexerOptions {
   verbose?: boolean;
 }
 
+/** Canonical HTML roots owned by the derived index. */
+export const INDEXED_PAGE_ROOTS = [
+  'brain',
+  'logs/meetings',
+  'logs/reports',
+  'out',
+] as const;
+
+/** Whether a vault-relative path is a canonical HTML page path we index. */
+export function isIndexedPagePath(relPath: string): boolean {
+  const normalized = relPath.replaceAll('\\', '/');
+  return normalized.endsWith('.html') && INDEXED_PAGE_ROOTS.some((root) =>
+    normalized.startsWith(`${root}/`),
+  );
+}
+
+/** Archive paths remain indexable for provenance, but current pages resolve first. */
+export function isArchivedPagePath(relPath: string): boolean {
+  return /(?:^|\/)(?:archive|archives|archived)(?:\/|$)/i.test(relPath);
+}
+
 /** Options for search() */
 export interface SearchOptions {
   /** Number of results to return (default 20) */

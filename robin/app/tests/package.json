@@ -4,7 +4,10 @@
   "private": true,
   "description": "Playwright E2E tests for robin",
   "scripts": {
+    "pretest": "npm --prefix .. run build --workspace=@robin/web",
     "test": "playwright test",
+    "pretest:loop": "npm --prefix .. run build --workspace=@robin/web",
+    "test:loop": "playwright test specs/chief-of-staff-loop.spec.ts",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
     "test:list": "playwright test --list",

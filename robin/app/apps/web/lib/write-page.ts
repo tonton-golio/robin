@@ -1,57 +1,60 @@
 /**
- * Atomic file writer for Robin HTML pages.
+ * Atomic file writer for Robin HTML pages (web/UI write path).
  *
- * Writes via tmp file + rename to prevent partial writes.
- * After write, optionally notifies the indexer if the route exists.
+ * Delegates to @robin/vault-io `writeWithHistory` — the single write choke point
+ * shared with the MCP server — which does the atomic tmp+rename and the
+ * content-hash no-op, and is where history snapshots + the edit-event log will
+ * hook in (see robin/app/docs/edit-log-ingest.md). This wrapper only resolves the
+ * vault-relative path to an absolute one and tags the origin; the brain/inbox/
+ * out/logs allowlist stays in each caller (normalizeVaultFilePath) as before.
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import crypto from 'crypto';
-import { vaultPath } from './vault';
+import { vaultPath, locateVault } from "./vault";
+import { writeWithHistory } from "@robin/vault-io";
+import { refreshIndexPaths } from "./indexer-client";
 
 export interface WritePageOptions {
   /** Vault-relative path, e.g. 'brain/my-page.html' */
   vaultRelativePath: string;
   html: string;
+  /** CAS precondition: hash string for update, null for create-only. */
+  expectedHash?: string | null;
 }
 
-export async function writePage({ vaultRelativePath, html }: WritePageOptions): Promise<void> {
-  const absPath = vaultPath(vaultRelativePath);
-  const dir = path.dirname(absPath);
-  // Unique tmp name per write: two writes to the same page in the same
-  // millisecond would otherwise collide on `Date.now()` and race the rename.
-  const tmpPath = `${absPath}.tmp.${crypto.randomUUID()}`;
-
-  // Ensure directory exists
-  await fs.mkdir(dir, { recursive: true });
-
-  // Atomic write: write to tmp, then rename. If the write or rename fails, the
-  // tmp file would otherwise be orphaned on disk (e.g. ENOSPC mid-write, or a
-  // rename failure across a mount), accumulating `.tmp.<uuid>` litter next to
-  // the page. Clean it up on any failure before re-throwing.
-  try {
-    await fs.writeFile(tmpPath, html, 'utf-8');
-    await fs.rename(tmpPath, absPath);
-  } catch (err) {
-    await fs.rm(tmpPath, { force: true }).catch(() => {});
-    throw err;
+export async function writePage({
+  vaultRelativePath,
+  html,
+  expectedHash,
+}: WritePageOptions): Promise<void> {
+  const absolutePath = vaultPath(vaultRelativePath);
+  // Passing vaultRoot turns on history: prior bytes are snapshotted under
+  // base/.history/ and an edit event is appended to base/inbox/robin/edits/.
+  const result = await writeWithHistory({
+    absolutePath,
+    html,
+    origin: "web",
+    vaultRoot: locateVault(),
+    expectedHash,
+  });
+  if (result.written) {
+    await notifyIndexerWrite(vaultRelativePath).catch((error) => {
+      // The canonical write already committed. Do not turn a derived-index
+      // refresh failure into a false mutation failure and a dangerous retry.
+      console.warn(
+        `[write-page] write committed but index refresh failed for ${vaultRelativePath}:`,
+        error,
+      );
+    });
   }
 }
 
 /**
  * Notify the indexer of a write.
  *
- * No-op: there is no incremental indexer-notify pathway. Re-indexing is a full
- * scan triggered explicitly via POST /api/resync (see lib/indexer-client
- * `reindex`); the old `/api/indexer/notify-write` route never existed, so this
- * previously fired a 404 round-trip on every single write. (A 404 is a resolved
- * Response, not a thrown error, so the former try/catch never even caught it.)
- *
- * The export is retained because several write paths call it fire-and-forget;
- * keeping the no-op avoids touching those call sites. If incremental indexing is
- * ever wired up, implement it here behind the existing callers.
+ * Uses the live indexer's in-process incremental refresh. The indexer also runs
+ * a watcher for manual/direct writes; refresh marks the path as self-written so
+ * that watcher event is suppressed rather than indexed twice.
  */
-export async function notifyIndexerWrite(_vaultRelativePath: string): Promise<void> {
-  // intentionally empty — see doc comment.
+export async function notifyIndexerWrite(vaultRelativePath: string): Promise<void> {
+  await refreshIndexPaths([vaultRelativePath]);
 }

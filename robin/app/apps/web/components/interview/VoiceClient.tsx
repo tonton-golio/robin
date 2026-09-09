@@ -10,6 +10,7 @@ import {
   VoiceClient,
   type VoiceState,
   type VoiceErrorKind,
+  type VoiceRecording,
   type TranscriptEntry,
   type WsUrlProvider,
 } from "@/lib/voice-client";
@@ -25,7 +26,7 @@ export interface VoiceClientState {
   inputAnalyser: AnalyserNode | null;  // User mic input level (what you are saying)
   /** Accepts a static URL or a provider that mints a fresh URL/token per attempt. */
   start: (wsUrl: string | WsUrlProvider) => Promise<void>;
-  stop: () => Promise<void>;
+  stop: () => Promise<VoiceRecording | null>;
 }
 
 export function useVoiceClient(): VoiceClientState {
@@ -73,8 +74,9 @@ export function useVoiceClient(): VoiceClientState {
   }, []);
 
   const stop = useCallback(async () => {
-    await clientRef.current?.stop();
+    const recording = (await clientRef.current?.stop()) ?? null;
     clientRef.current = null;
+    return recording;
   }, []);
 
   // Safety net: if this hook ever unmounts mid-session (HMR, error boundary,

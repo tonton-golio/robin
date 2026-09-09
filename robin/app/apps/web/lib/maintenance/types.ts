@@ -1,40 +1,46 @@
 export type Severity = 'info' | 'warning' | 'critical';
 
-export interface MaintenanceCounts {
-  openAnnotations: number;
-  stalePages: number;
-  lintIssues: number;
-  taskIssues: number;
-  memoryIssues: number;
-  outputIssues: number;
-  totalIssues: number;
-  brokenWikilinks: number;
-  orphanPages: number;
-  metaIssues: number;
-  openTasks: number;
-  overdueTasks: number;
-  memoryMalformedEvents: number;
-  memoryTentative: number;
-  memoryRejected: number;
-  memorySuperseded: number;
-  outputArchiveCandidates: number;
+// Health status for the system-health dashboard. Ordered ok < warn < critical.
+export type HealthStatus = 'ok' | 'warn' | 'critical';
+
+// A single summary metric shown as a KPI tile inside a section.
+export interface HealthMetric {
+  label: string;
+  value: string | number;
+  status?: HealthStatus;
+  hint?: string;
+}
+
+// One dashboard section: an at-a-glance status, a set of summary metrics, and
+// an optional expandable detail list (top stale pages, integrity issues, ...).
+export interface HealthSection {
+  id: string;
+  title: string;
+  status: HealthStatus;
+  summary: string;
+  source?: string;
+  metrics: HealthMetric[];
+  itemsLabel?: string;
+  items: MaintenanceItem[];
+}
+
+// Compact per-section entry rendered in the top status strip.
+export interface HealthStripEntry {
+  id: string;
+  title: string;
+  status: HealthStatus;
+  headline: string;
 }
 
 export interface MaintenanceSnapshot {
   generatedAt: string;
-  counts: MaintenanceCounts;
-  sections: MaintenanceSection[];
+  overall: HealthStatus;
+  statusCounts: Record<HealthStatus, number>;
+  strip: HealthStripEntry[];
+  sections: HealthSection[];
 }
 
-export interface MaintenanceSection {
-  id: string;
-  title: string;
-  summary: string;
-  severity: Severity;
-  count: number;
-  items: MaintenanceItem[];
-}
-
+// Detail-row shape reused by every scanner's *Item mapper.
 export interface MaintenanceItem {
   id: string;
   title: string;

@@ -2,6 +2,7 @@ import path from 'path';
 import { listBrainPages, pageHref, type CatalogPage } from '@/lib/catalog';
 import { readPage } from '@/lib/read-page';
 import { locateVault } from '@/lib/vault';
+import { isArchivePath } from '@/lib/archive';
 import type { MaintenanceItem, Severity } from './types';
 import { attrValue, isValidDate, readText, severityRank, titleFromPath, walk } from './shared';
 
@@ -97,7 +98,11 @@ export async function getWikiSection(limit: number): Promise<WikiSection> {
       const resolved = resolveTarget(slug);
       if (resolved) {
         inbound.set(resolved, (inbound.get(resolved) ?? 0) + 1);
-      } else {
+      } else if (!isLinkCheckExemptSource(page.path)) {
+        // Archived sources (inbox/archived/, any archive/ segment) legitimately
+        // reference pages that have since moved or been pruned — skip them as
+        // SOURCES of the broken-link check, matching the canonical vault.lint
+        // framework defaults. Their resolving links still count as inbound.
         broken.push({
           fromPath: page.path,
           fromTitle: page.title,
@@ -260,8 +265,20 @@ function extractMetaMap(html: string): Map<string, string | undefined> {
   return map;
 }
 
+/**
+ * Broken-wikilink source exemption, mirroring the canonical vault.lint
+ * framework defaults: pages under inbox/archived/ or any archive/ directory
+ * segment are skipped as SOURCES of the broken-link check (this scan only
+ * covers brain/, so in practice the archive/ rule is the one that fires).
+ */
+function isLinkCheckExemptSource(relPath: string): boolean {
+  return relPath.startsWith('inbox/archived/') || isArchivePath(relPath);
+}
+
 function isOrphanCandidate(page: CatalogPage): boolean {
   if (page.path.endsWith('/_index.html') || page.path === 'brain/_index.html') return false;
-  if (page.path.includes('/archive/')) return false;
+  // Archives are exempt from the orphan check; logs/, out/, and inbox/ are too
+  // per the vault.lint framework defaults, but this scan only covers brain/.
+  if (isArchivePath(page.path)) return false;
   return page.type !== 'task';
 }

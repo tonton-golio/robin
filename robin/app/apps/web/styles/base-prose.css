@@ -1,0 +1,408 @@
+/* Robin base prose + document surfaces — "Quiet Slate" v2.
+   Owner: FOUNDATION. Covers page-content prose (.robin-prose), the markdown
+   log view (.robin-log), annotation highlights (.robin-highlight), scrollbars,
+   and the print layout for reader-rendered reports. Reader prose is the one
+   place with its own type scale: 16px/1.7 with the real --font-serif for
+   paragraphs and list items, headings staying sans, clamped to 68ch. Colour
+   comes from tokens only; links use --link (body copy) rather than the UI
+   accent, and surfaces separate by elevation rather than by a drawn box.
+   The @media print block at the bottom deliberately keeps hardcoded #fff /
+   #0b0b0e: print is paper, not a theme. Class names are stable. */
+
+/* ── Page content prose ───────────────────────────────────────────── */
+.robin-prose {
+  max-width: 68ch;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.7;
+}
+/* reading text is serif; headings, labels and data stay sans/mono */
+.robin-prose p,
+.robin-prose li { font-family: var(--font-serif); }
+
+.robin-prose h1 {
+  font-family: var(--font-sans);
+  font-size: 1.75rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin: 0 0 1rem;
+  color: var(--ink);
+}
+.robin-prose h2 {
+  font-family: var(--font-sans);
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  margin: 1.9rem 0 0.75rem;
+  color: var(--ink);
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 0.3rem;
+}
+.robin-prose h3 {
+  font-family: var(--font-sans);
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 1.35rem 0 0.5rem;
+  color: var(--ink);
+}
+.robin-prose h4,
+.robin-prose h5,
+.robin-prose h6 {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  margin: 1rem 0 0.5rem;
+  color: var(--muted);
+}
+
+.robin-prose p { margin: 0 0 0.8rem; }
+
+.robin-prose a {
+  color: var(--link);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+.robin-prose a:hover { text-decoration: underline; }
+.robin-prose a[data-broken="missing"] {
+  color: var(--red);
+  border-bottom: 1px dashed var(--red);
+}
+.robin-prose a[data-broken="ambiguous"] {
+  color: var(--warn);
+  border-bottom: 1px dashed var(--warn);
+}
+.robin-prose a[data-archived="true"] {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.robin-prose strong { font-weight: 700; color: var(--ink); }
+.robin-prose em { font-style: italic; }
+.robin-prose s { text-decoration: line-through; color: var(--muted); }
+/* Inline emphasis: an accent wash that leaves the text colour alone — marked
+   runs must not invert. Matches .r-hl / .r-hl-ink in primitives.css. */
+.robin-prose mark {
+  background: var(--accent-wash);
+  color: var(--ink);
+  padding: 0 0.2em 0.04em;
+  border-radius: var(--radius-sm);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.robin-prose ul { list-style: disc; padding-left: 1.5rem; margin: 0 0 0.8rem; }
+.robin-prose ol { list-style: decimal; padding-left: 1.5rem; margin: 0 0 0.8rem; }
+.robin-prose li { margin: 0.2rem 0; }
+.robin-prose li > ul,
+.robin-prose li > ol { margin: 0.2rem 0; }
+
+/* Task list — softly rounded checkbox on a 1px --line edge; checked = accent fill */
+.robin-prose li[data-block="task"] {
+  list-style: none;
+  margin-left: -1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.robin-prose li[data-block="task"]::before {
+  content: '';
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+  display: inline-block;
+}
+.robin-prose li[data-block="task"][data-checked="true"]::before {
+  background-color: var(--blue);
+  border-color: var(--blue);
+}
+
+.robin-prose code {
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+/* code blocks separate by elevation, not by an outline */
+.robin-prose pre {
+  background: var(--card);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 0 0 1rem;
+}
+.robin-prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+/* quote: a raised surface marked by an accent spine (the accent as a spine,
+   never as a colour field) */
+.robin-prose blockquote {
+  border-left: 3px solid var(--blue);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 0.5rem 1rem;
+  margin: 0 0 0.8rem;
+  color: var(--muted);
+  background: var(--card);
+}
+
+.robin-prose hr {
+  border: none;
+  border-top: 1px solid var(--hairline);
+  margin: 1.6rem 0;
+}
+
+.robin-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+/* table header: a quiet raised band with a micro-label; the underline is one of
+   the structural --line cases */
+.robin-prose th {
+  background: var(--card-2);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--line);
+}
+.robin-prose td {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--hairline);
+  font-variant-numeric: tabular-nums;
+}
+.robin-prose tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+/* Callouts — a raised surface marked by a semantic left rule (accent / warn /
+   red / good). Elevation carries the separation, so there is no full frame. */
+.robin-prose aside[data-callout] {
+  background: var(--card);
+  border: none;
+  border-left: 3px solid var(--blue);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  box-shadow: var(--offset-sm);
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem;
+}
+.robin-prose aside[data-callout="info"] { border-left-color: var(--blue); }
+.robin-prose aside[data-callout="warning"] { border-left-color: var(--warn); }
+.robin-prose aside[data-callout="danger"],
+.robin-prose aside[data-callout="error"] { border-left-color: var(--red); }
+.robin-prose aside[data-callout="tip"],
+.robin-prose aside[data-callout="success"] { border-left-color: var(--good); }
+
+/* callout title: a title, so sentence case as authored - no case transform */
+.robin-prose header[data-block="calloutTitle"] {
+  font-weight: 650;
+  color: var(--ink);
+  margin-bottom: 0.4rem;
+}
+
+/* Hub children — hairline-separated index list */
+.robin-prose ul[data-block="hubChildren"] {
+  list-style: none;
+  padding-left: 0;
+}
+.robin-prose ul[data-block="hubChildren"] li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Figures */
+.robin-prose figure { margin: 0 0 1rem; }
+.robin-prose figure img {
+  max-width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+.robin-prose figcaption {
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+/* ── Markdown log view (operational record: sans, denser than reader prose) ── */
+.robin-log { max-width: 80ch; color: var(--ink); font-family: var(--font-sans); }
+.robin-log h1,
+.robin-log h2,
+.robin-log h3 { color: var(--ink); font-weight: 650; letter-spacing: -0.015em; }
+.robin-log h2 {
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 0.25rem;
+  margin-top: 1.5rem;
+}
+.robin-log p { margin-bottom: 0.5rem; color: var(--muted); }
+.robin-log code {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* ── Annotation highlights ────────────────────────────────────────────
+   Applied by the Annotator as <mark class="robin-highlight">. A translucent
+   accent wash by default, text colour untouched; the data-color variants map
+   onto the current tokens (legacy cyan/violet/rust names are kept because
+   stored annotations still carry them). */
+.robin-highlight {
+  background: color-mix(in srgb, var(--blue) 18%, transparent);
+  color: inherit;
+  padding: 0 0.05em;
+  border-radius: var(--radius-sm);
+}
+.robin-highlight[data-color="cyan"] { background: color-mix(in srgb, var(--blue) 20%, transparent); }
+.robin-highlight[data-color="violet"] { background: color-mix(in srgb, var(--ink) 14%, transparent); }
+.robin-highlight[data-color="rust"] { background: color-mix(in srgb, var(--red) 18%, transparent); }
+
+/* ── Scrollbar ────────────────────────────────────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
+}
+
+/* ── Print layout for reader-rendered reports (window.print → Save as PDF) ──
+   Reports render as app DOM (PageWorkspace → FlowPageView), so printing means
+   isolating the <article data-robin-doc> and shedding the app chrome. Force a
+   light ink-on-paper surface regardless of the active theme, keep inline-SVG
+   charts intact, and avoid splitting figures/tables/details across page breaks.
+   Decks print their own iframe document (robin-deck.css), not this path. */
+.no-print { /* opt-out marker; only meaningful inside @media print */ }
+
+@page { margin: 18mm 16mm; }
+
+@media print {
+  html, body {
+    background: #fff !important;
+    color: #0b0b0e !important;
+  }
+
+  /* Drop the Living Workspace furniture entirely. */
+  .workspace-sidebar,
+  .workspace-topbar,
+  .workspace-mobile-nav,
+  .workspace-dialog-overlay,
+  .workspace-dialog-content,
+  .workspace-sheet,
+  .workspace-skip-link,
+  .workspace-route-announcer,
+  .robin-widget-layer,
+  .robin-cmdk-overlay,
+  .robin-toast,
+  .robin-print-hint,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Collapse the workspace grid so the content column owns the full width. */
+  .workspace-shell,
+  .workspace-stage {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .workspace-main {
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+  }
+
+  /* The report article fills the page; drop the on-screen clamp + padding. */
+  .robin-doc-article {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ink-on-paper body + hairline borders. */
+  .robin-doc-article,
+  .robin-doc-article * {
+    color: #0b0b0e !important;
+    border-color: #c9c8c2 !important;
+  }
+  .robin-doc-article h1,
+  .robin-doc-article h2,
+  .robin-doc-article h3 { color: #0b0b0e !important; }
+
+  /* FlowPageView collapses reports into <details> cards; force them open and
+     strip the card chrome so the whole report prints. */
+  .robin-doc-article details { display: block !important; }
+  .robin-doc-article details > div { display: block !important; }
+  .robin-doc-article details,
+  .robin-doc-article .robin-prose details {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  /* The decorative flow spine + node dots are screen-only. */
+  .robin-doc-article [aria-label="Page flow"]::before { display: none !important; }
+  .robin-doc-article [aria-label="Page flow"] {
+    display: block !important;
+    padding-left: 0 !important;
+    gap: 0 !important;
+  }
+
+  /* Keep exhibits whole across page breaks. */
+  .robin-doc-article figure,
+  .robin-doc-article table,
+  .robin-doc-article svg,
+  .robin-doc-article pre,
+  .robin-doc-article blockquote,
+  .robin-doc-article img,
+  .robin-doc-article details > summary {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .robin-doc-article h1,
+  .robin-doc-article h2,
+  .robin-doc-article h3 {
+    page-break-after: avoid;
+    break-after: avoid-page;
+  }
+
+  /* Preserve chart/exhibit colors in the PDF. */
+  .robin-doc-article,
+  .robin-doc-article * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

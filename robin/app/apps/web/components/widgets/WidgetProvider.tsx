@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * WidgetProvider — single source of truth for the top-bar tool widgets.
+ * WidgetProvider — single source of truth for the capture widgets.
  *
- * Mounted once inside AppShell (which itself never remounts across route
- * changes), so the interview and meeting sessions it owns stay alive while the
- * user navigates the brain. Each widget has three presentation states:
+ * Mounted once inside LivingWorkspaceShell, so the interview and meeting
+ * sessions it owns stay alive while the user navigates the archive. Each
+ * widget has three presentation states:
  *   collapsed (icon only) · small (compact viewer) · big (full viewer)
  */
 
@@ -19,12 +19,9 @@ export type WidgetSize = "small" | "big";
 interface WidgetContextValue {
   openId: WidgetId | null;
   size: WidgetSize;
-  open: (id: WidgetId) => void;
-  toggle: (id: WidgetId) => void;
   collapse: () => void;
   setSize: (s: WidgetSize) => void;
   cycleSize: () => void;
-  isLive: (id: WidgetId) => boolean;
   interview: InterviewSession;
   meeting: MeetingSession;
 }
@@ -38,7 +35,6 @@ export function WidgetProvider({ children }: { children: React.ReactNode }) {
   const interview = useInterviewSession();
   const meeting = useMeetingSession();
 
-  const open = useCallback((id: WidgetId) => setOpenId(id), []);
   const collapse = useCallback(() => setOpenId(null), []);
 
   // Let any part of the app open a widget by dispatching a window event
@@ -52,17 +48,19 @@ export function WidgetProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("robin:open-widget", onOpen as EventListener);
     return () => window.removeEventListener("robin:open-widget", onOpen as EventListener);
   }, []);
-  const toggle = useCallback((id: WidgetId) => setOpenId((cur) => (cur === id ? null : id)), []);
+
+  // A shareable local deep-link can open the interview at full size and let
+  // useInterviewSession select the requested brief, e.g. `?interview=<slug>`.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("interview")) return;
+    setOpenId("interview");
+    setSize("big");
+  }, []);
   const cycleSize = useCallback(() => setSize((s) => (s === "small" ? "big" : "small")), []);
 
-  const isLive = useCallback(
-    (id: WidgetId) => (id === "interview" ? interview.isActive : meeting.isActive),
-    [interview.isActive, meeting.isActive],
-  );
-
   const value = useMemo<WidgetContextValue>(
-    () => ({ openId, size, open, toggle, collapse, setSize, cycleSize, isLive, interview, meeting }),
-    [openId, size, open, toggle, collapse, cycleSize, isLive, interview, meeting],
+    () => ({ openId, size, collapse, setSize, cycleSize, interview, meeting }),
+    [openId, size, collapse, cycleSize, interview, meeting],
   );
 
   return <WidgetContext.Provider value={value}>{children}</WidgetContext.Provider>;

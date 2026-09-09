@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robin.local/schemas/v1/capture-manifest.schema.json",
+  "title": "Robin capture manifest",
+  "description": "Portable identity, provenance, lifecycle, and retention metadata for one immutable inbox capture.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "capture_id",
+    "sha256",
+    "mime",
+    "source_kind",
+    "source_ref",
+    "sensitivity",
+    "retention",
+    "state",
+    "derived_outputs",
+    "captured_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "capture_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "mime": {
+      "type": "string",
+      "pattern": "^[^\\s/]+/[^\\s/]+$"
+    },
+    "source_kind": {
+      "enum": [
+        "annotation",
+        "audio",
+        "conversation",
+        "document",
+        "email",
+        "import",
+        "manual",
+        "meeting",
+        "other",
+        "slack",
+        "upload",
+        "web"
+      ]
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sensitivity": {
+      "enum": ["confidential", "internal", "private", "public", "restricted"]
+    },
+    "retention": {
+      "enum": ["ephemeral", "legal-hold", "permanent", "standard"]
+    },
+    "state": {
+      "enum": ["archived", "ingested", "landed", "reviewed"]
+    },
+    "derived_outputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!/)(?!\\.\\.?(?:/|$))(?!.*//)(?!.*\\/\\.\\.?(?:/|$))(?!.*\\\\)[^\\r\\n]+$"
+      },
+      "uniqueItems": true
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": ["reviewed", "ingested", "archived"]
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["reviewed_at"]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": ["ingested", "archived"]
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "ingested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["ingested_at"]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "const": "archived"
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "archived_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["archived_at"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "landed"
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "reviewed_at": false,
+          "ingested_at": false,
+          "archived_at": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "reviewed"
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "ingested_at": false,
+          "archived_at": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "ingested"
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "archived_at": false
+        }
+      }
+    }
+  ]
+}

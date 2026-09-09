@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/robin-test';
 
 /**
  * brain.spec.ts
@@ -20,7 +20,7 @@ test.describe('brain pages', () => {
 
   test('risk-register page has article body', async ({ page }) => {
     await page.goto('/p/brain/risk-register');
-    const article = page.locator('article[data-robin-doc]');
+    const article = page.locator('.robin-prose');
     await expect(article).toBeVisible();
   });
 
@@ -54,7 +54,7 @@ test.describe('brain pages', () => {
     // The web serializer must map hast property aliases back to real HTML
     // attributes: className→class (space-joined), colSpan→colspan. A regression
     // emits class-name/col-span, which browsers ignore.
-    await expect(page.locator('article[data-robin-doc] p.callout.lead')).toBeVisible();
-    await expect(page.locator('article[data-robin-doc] td[colspan="2"]')).toBeVisible();
+    await expect(page.locator('.robin-prose p.callout.lead')).toBeVisible();
+    await expect(page.locator('.robin-prose td[colspan="2"]')).toBeVisible();
   });
 });

@@ -4,15 +4,16 @@
   "private": true,
   "description": "Local web UI for the Robin second brain.",
   "scripts": {
-    "dev": "next dev -p 8400",
+    "dev": "next dev -H 127.0.0.1 -p 8400",
     "build": "next build",
-    "start": "next start -p 8400",
-    "test": "vitest run lib/routes.test.ts lib/annotations.test.ts lib/catalog.test.ts app/outputs/OutputPreview.test.tsx",
+    "start": "next start -H 127.0.0.1 -p 8400",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@robin/converter": "*",
     "@robin/memory": "*",
+    "@robin/vault-io": "*",
     "@tailwindcss/postcss": "^4.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -27,7 +28,6 @@
     "radix-ui": "^1.4.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-force-graph-2d": "^1.29.1",
     "swr": "^2.4.1",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0",

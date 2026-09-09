@@ -1,0 +1,74 @@
+{
+  "title": "Robin executable vault contract",
+  "contract_version": 1,
+  "page": {
+    "default_format_version": "0.2",
+    "roots": [
+      {
+        "path": "brain",
+        "include": "all_html"
+      },
+      {
+        "path": "logs",
+        "include": "robin_pages"
+      },
+      {
+        "path": "out",
+        "include": "robin_pages"
+      }
+    ],
+    "metadata_schema": "page-metadata.schema.json",
+    "required_structure": {
+      "doctype": true,
+      "article_data_robin_doc": 1,
+      "forbid_legacy_json_scripts": true
+    }
+  },
+  "brain": {
+    "allowed_non_html_paths": [
+      "brain/memory/events.jsonl"
+    ],
+    "allowed_non_html_basenames": [
+      ".gitkeep"
+    ]
+  },
+  "ledgers": [
+    {
+      "name": "memory",
+      "path": "brain/memory/events.jsonl",
+      "required": true,
+      "schema": "memory-event.schema.json"
+    },
+    {
+      "name": "annotations",
+      "directory": "inbox/robin/annotations",
+      "suffix": ".jsonl",
+      "required": false,
+      "schema": "annotation-event.schema.json"
+    },
+    {
+      "name": "edits",
+      "directory": "inbox/robin/edits",
+      "suffix": ".jsonl",
+      "required": false,
+      "schema": "edit-event.schema.json",
+      "snapshot_field": "snapshot"
+    }
+  ],
+  "transaction_receipts": {
+    "directory": ".robin/transactions",
+    "suffix": ".json",
+    "schema": "transaction-receipt.schema.json"
+  },
+  "capture_manifest": {
+    "schema": "capture-manifest.schema.json",
+    "template": "capture-manifest.template.json",
+    "validation": "schema_only"
+  },
+  "shadow_roots": [
+    "brain",
+    "inbox",
+    "logs",
+    "out"
+  ]
+}

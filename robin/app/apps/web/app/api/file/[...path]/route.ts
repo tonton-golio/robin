@@ -3,10 +3,12 @@ import { Readable } from 'node:stream';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   contentTypeForPath,
-  normalizeVaultFilePath,
+  normalizeVaultServePath,
   resolveContainedVaultPath,
   statVaultFile,
 } from '@/lib/vault-file';
+import { resolveMovedHtmlPath } from '@/lib/moved-path';
+import { vaultApiFileHref } from '@/lib/routes';
 
 interface FileApiProps {
   params: Promise<{ path: string[] }>;
@@ -67,7 +69,7 @@ function toBody(stream: Readable): ReadableStream {
 
 export async function GET(request: NextRequest, { params }: FileApiProps): Promise<NextResponse> {
   const { path } = await params;
-  const relPath = normalizeVaultFilePath(path);
+  const relPath = normalizeVaultServePath(path);
   if (!relPath) {
     return NextResponse.json({ error: 'unsafe_path' }, { status: 400 });
   }
@@ -118,7 +120,15 @@ export async function GET(request: NextRequest, { params }: FileApiProps): Promi
         'accept-ranges': 'bytes',
       },
     });
-  } catch {
+  } catch (error) {
+    // Move history is a missing-file fallback only. Permission, containment,
+    // and other read failures must retain their normal closed 404 behavior.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' && relPath.endsWith('.html')) {
+      const movedPath = await resolveMovedHtmlPath(relPath);
+      if (movedPath) {
+        return NextResponse.redirect(new URL(vaultApiFileHref(movedPath), request.url), 307);
+      }
+    }
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 }

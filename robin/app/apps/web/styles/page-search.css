@@ -1,0 +1,544 @@
+/* Robin page styles - search. Owner: search page. "Quiet Slate" v2.
+   The durable full-results surface behind Cmd-K. The accent moment of this view
+   is the matched-term .r-hl highlight (a functional affordance, not decoration):
+   it is an --accent-wash fill that never inverts the text, so hits stay
+   readable. Everything else in the view stays quiet - the SEARCH button, the
+   refine bar and the row actions deliberately avoid the accent so nothing
+   competes with the hits. Rows separate with --hairline and the selected row is
+   a level-2 surface (--card + --offset) with an accent spine. --line survives
+   only on the query input, small outlined controls and the fixed bar's top
+   edge. Red is overdue / fallback / error only, and prefers --red-wash plus
+   --red text. All colour via tokens.css; the .r-* primitives carry the shared
+   vocabulary and these rules cover the search-specific pieces. */
+
+.srch {
+  max-width: 1060px;
+  width: 100%;
+  padding: 26px 28px 120px;
+}
+
+/* ---- query block: label + input read as one bordered field ---- */
+.srch-queryrow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 16px 0 0;
+  max-width: 760px;
+}
+.srch-qlabel {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--card-2);
+  color: var(--muted);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+}
+.srch-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+}
+.srch-input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.srch-run {
+  margin-left: 14px;
+  align-self: center;
+}
+
+.srch-hint {
+  margin: 8px 0 0;
+  font-size: var(--lab-size);
+}
+.srch-hint b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* ---- degraded banner: red wash + red spine, not a red outline ---- */
+.srch-degraded {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: none;
+  border-left: 3px solid var(--red);
+  border-radius: var(--radius);
+  background: var(--red-wash);
+  padding: 10px 14px;
+  margin-top: 18px;
+  font-size: 12px;
+}
+.srch-degraded-msg {
+  flex: 1;
+  min-width: 240px;
+}
+.srch-resync {
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 6px 10px;
+  cursor: pointer;
+  box-shadow: var(--offset-sm);
+  transition: box-shadow 120ms ease, background-color 120ms ease;
+}
+.srch-resync:hover {
+  box-shadow: var(--offset);
+}
+.srch-resync:active {
+  box-shadow: none;
+}
+.srch-resync:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ---- filters ---- */
+.srch-filters {
+  margin: 22px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.srch-fgroup {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.srch-flabel {
+  width: 64px;
+  flex: none;
+  font-size: var(--lab-size);
+}
+.srch-fhint {
+  margin-left: auto;
+  align-self: center;
+  font-size: var(--lab-size);
+}
+/* filter pills: 999px outline pills; pressed = accent wash + accent text,
+   never an inverted ink block. */
+.srch-fpill {
+  display: inline-flex;
+  align-items: baseline;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: 600;
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.srch-fpill:hover {
+  color: var(--ink);
+}
+.srch-fpill[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.srch-fpill:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.srch-fpill .cnt {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+  color: var(--muted);
+}
+.srch-fpill .key {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  margin-left: 6px;
+  color: var(--muted);
+}
+.srch-fclear {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 5px 0 4px;
+}
+.srch-fclear:hover {
+  color: var(--ink);
+}
+
+/* ---- count line ---- */
+.srch-countline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--hairline);
+  margin: 24px 0 0;
+  padding-bottom: 8px;
+}
+.srch-countline .r-mono {
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+}
+.srch-refine {
+  color: var(--red);
+  font-weight: 650;
+}
+
+/* ---- overloaded / capped refine bar: a level-2 surface with a quiet muted
+   spine. It stays off the accent on purpose - the .r-hl hits own the accent
+   in this view. ---- */
+.srch-refinebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--offset), inset 2px 0 0 var(--muted);
+  padding: 9px 14px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+/* ---- results list: hairline separators, selected row raises to level 2 ---- */
+.srch-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.srch-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  border-bottom: 1px solid var(--hairline);
+  padding: 14px 6px 13px;
+  cursor: pointer;
+  position: relative;
+}
+.srch-row:hover {
+  background: var(--card);
+}
+.srch-row:focus {
+  outline: none;
+}
+.srch-row:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+.srch-row[aria-current='true'] {
+  background: var(--card);
+  border-bottom-color: transparent;
+  border-radius: var(--radius);
+  box-shadow: var(--offset), inset 2px 0 0 var(--blue);
+}
+.srch-glyph {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--lab-size);
+  font-weight: 650;
+  margin-top: 2px;
+}
+/* selected glyph marks itself with the accent wash instead of a shadow, so it
+   never carries a border and a shadow at once. */
+.srch-row[aria-current='true'] .srch-glyph {
+  background: var(--accent-wash);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  color: var(--blue);
+}
+.srch-body {
+  min-width: 0;
+}
+.srch-title {
+  font-weight: 650;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.srch-path {
+  margin-top: 2px;
+  font-size: var(--meta-size);
+  overflow-wrap: anywhere;
+}
+.srch-snippet {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--ink);
+  max-width: 66ch;
+}
+.srch-prov {
+  margin-top: 6px;
+  font-size: var(--meta-size);
+}
+.srch-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 2px;
+}
+.srch-due {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--red);
+  font-weight: 650;
+}
+.srch-score {
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* ---- row action strip: shown on the selected row AND on focus-within, so the
+   real <button>s are Tab-reachable, not gated behind the o/y/Enter shortcuts. */
+.srch-actions {
+  display: none;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.srch-row[aria-current='true'] .srch-actions,
+.srch-row:focus-within .srch-actions {
+  display: flex;
+}
+.srch-act {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: 600;
+  letter-spacing: 0;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.srch-act:hover {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.srch-act:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.srch-act .k {
+  font-family: var(--font-mono);
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+/* ---- degraded results actually degrade: the grep fallback can't rank, so the
+   accent-wash highlight collapses to a plain mono underline and scores are
+   dropped. ---- */
+.srch-results.is-degraded .r-hl {
+  background: transparent;
+  color: var(--ink);
+  padding: 0;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.srch-suppressed {
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: transparent;
+  padding: 11px 14px;
+  margin-top: 2px;
+  font-size: var(--lab-size);
+}
+
+/* ---- loading skeleton: an ink wash, pulsed by opacity ---- */
+.srch-skelrow {
+  cursor: default;
+}
+.srch-sk {
+  background: var(--ink);
+  opacity: 0.1;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  animation: srch-pulse 1.2s ease-in-out infinite;
+}
+@keyframes srch-pulse {
+  0%,
+  100% {
+    opacity: 0.08;
+  }
+  50% {
+    opacity: 0.18;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .srch-sk {
+    animation: none;
+  }
+}
+
+/* ---- state boxes (empty / error / short query) ---- */
+.srch-state {
+  max-width: 640px;
+  margin-top: 30px;
+  padding: 26px 28px;
+}
+.srch-state-title {
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  margin: 12px 0 6px;
+}
+.srch-state p {
+  font-size: 13px;
+  max-width: 56ch;
+  margin: 6px 0;
+}
+.srch-state-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.srch-state-meta {
+  margin-top: 12px;
+  font-size: var(--lab-size);
+}
+/* danger eyebrow: wash + red text, never a solid red fill */
+.srch-bar-danger {
+  background: var(--red-wash);
+  color: var(--red);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+}
+/* the error state marks itself with a red spine (the box has no border now) */
+.srch-state--error {
+  box-shadow: var(--offset), inset 3px 0 0 var(--red);
+}
+
+/* ---- idle: recent searches + coverage ---- */
+.srch-idle {
+  margin-top: 26px;
+  max-width: 640px;
+}
+.srch-recents {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--hairline);
+}
+.srch-recents li {
+  border-bottom: 1px solid var(--hairline);
+}
+.srch-recents button {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 11px 4px;
+  cursor: pointer;
+}
+.srch-recents button:hover {
+  background: var(--card);
+}
+.srch-recents button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+.srch-recents .rq {
+  font-size: 13px;
+}
+.srch-recents .rmeta {
+  margin-left: auto;
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+}
+.srch-coverage {
+  margin-top: 18px;
+  font-size: var(--lab-size);
+}
+
+/* ---- toast: level-3 surface ---- */
+.srch-toast {
+  position: fixed;
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  background: var(--card-2);
+  color: var(--ink);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--offset-lg);
+  font-size: var(--lab-size);
+  padding: 8px 14px;
+}
+
+/* ---- responsive ---- */
+@media (max-width: 640px) {
+  .srch {
+    padding: 20px 16px 130px;
+  }
+  .srch-run {
+    display: none;
+  }
+  .srch-row {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+  .srch-side {
+    grid-column: 2;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 6px;
+  }
+}

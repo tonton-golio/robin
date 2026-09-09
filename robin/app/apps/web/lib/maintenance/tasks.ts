@@ -2,30 +2,25 @@ import path from 'path';
 import { pageHref } from '@/lib/catalog';
 import { readPage, type PageData } from '@/lib/read-page';
 import { locateVault } from '@/lib/vault';
+import { isArchivePath } from '@/lib/archive';
 import type { MaintenanceItem, Severity } from './types';
-import {
-  ageDays,
-  DONE_TASK_STATES,
-  isBeforeDay,
-  severityRank,
-  STALE_OPEN_TASK_DAYS,
-  stringValue,
-  titleFromPath,
-  walk,
-} from './shared';
+import { DONE_TASK_STATES, severityRank, stringValue, titleFromPath, walk } from './shared';
 
-export interface TaskHygieneSection {
+// Task INTEGRITY only. Deadline signals (overdue / missing-or-past due date)
+// were removed 2026-07 — /standup owns deadlines fully. What remains here are
+// genuine vault-integrity signals on open task pages: missing owner, missing
+// priority, open tasks parked in an archive/ directory, and parse errors.
+// These are folded into the Format & link integrity dashboard section.
+export interface TaskIntegritySection {
   title: string;
   source: string;
   total: number;
   open: number;
   done: number;
-  overdue: number;
-  missingDue: number;
   missingOwner: number;
   missingPriority: number;
-  staleOpen: number;
   openInArchive: number;
+  parseErrors: number;
   issueCount: number;
   items: TaskIssue[];
 }
@@ -35,33 +30,30 @@ export interface TaskIssue {
   title: string;
   state: string;
   issue: string;
-  due?: string;
   owner?: string;
   priority?: string;
-  updated?: string;
   href: string;
   severity: Severity;
 }
 
-export async function getTaskHygieneSection(generatedAt: string, limit: number): Promise<TaskHygieneSection> {
+export async function getTaskIntegritySection(limit: number): Promise<TaskIntegritySection> {
   const vault = locateVault();
-  const relFiles = (await walk(vault, path.join('brain', 'tasks')))
-    .filter((file) => file.endsWith('.html'));
-  const now = new Date(generatedAt);
+  const relFiles = (await walk(vault, path.join('brain', 'tasks'))).filter((file) => file.endsWith('.html'));
   const issues: TaskIssue[] = [];
 
+  let total = 0;
   let open = 0;
   let done = 0;
-  let overdue = 0;
-  let missingDue = 0;
   let missingOwner = 0;
   let missingPriority = 0;
-  let staleOpen = 0;
   let openInArchive = 0;
+  let parseErrors = 0;
 
   for (const relFile of relFiles) {
     const page = await readPage(relFile);
     if ('error' in page) {
+      parseErrors += 1;
+      total += 1;
       issues.push({
         path: relFile,
         title: titleFromPath(relFile),
@@ -73,12 +65,17 @@ export async function getTaskHygieneSection(generatedAt: string, limit: number):
       continue;
     }
 
+    // brain/tasks/ also holds non-task pages (the _index.html hub, occasional
+    // notes). Only pages that declare robin:type=task carry the owner/priority
+    // integrity contract — scanning the rest produced false "missing owner /
+    // missing priority" issues. Skip anything not typed as a task.
+    if (page.meta.type !== 'task') continue;
+    total += 1;
+
     const state = taskState(page);
     const isDone = DONE_TASK_STATES.has(state.toLowerCase());
-    const due = stringValue(page.meta.due) ?? stringValue(page.frontmatter['due']);
     const owner = stringValue(page.meta.owner) ?? stringValue(page.frontmatter['owner']);
     const priority = stringValue(page.meta.priority) ?? stringValue(page.frontmatter['priority']);
-    const updated = stringValue(page.meta.updated) ?? stringValue(page.frontmatter['updated']);
 
     if (isDone) {
       done += 1;
@@ -86,47 +83,30 @@ export async function getTaskHygieneSection(generatedAt: string, limit: number):
     }
 
     open += 1;
-    if (relFile.includes('/archive/')) {
+    if (isArchivePath(relFile)) {
       openInArchive += 1;
       issues.push(taskIssue(page, state, 'open task is in archive', 'warning'));
     }
-
-    if (!due) {
-      missingDue += 1;
-      issues.push(taskIssue(page, state, 'missing due date', 'info'));
-    } else if (isBeforeDay(due, now)) {
-      overdue += 1;
-      issues.push(taskIssue(page, state, 'overdue', 'critical'));
-    }
-
     if (!owner) {
       missingOwner += 1;
       issues.push(taskIssue(page, state, 'missing owner', 'warning'));
     }
-
     if (!priority) {
       missingPriority += 1;
       issues.push(taskIssue(page, state, 'missing priority', 'info'));
     }
-
-    if (updated && ageDays(updated, now) > STALE_OPEN_TASK_DAYS) {
-      staleOpen += 1;
-      issues.push(taskIssue(page, state, `not updated in ${STALE_OPEN_TASK_DAYS}+ days`, 'warning'));
-    }
   }
 
   return {
-    title: 'Task hygiene',
+    title: 'Task integrity',
     source: 'brain/tasks/**/*.html',
-    total: relFiles.length,
+    total,
     open,
     done,
-    overdue,
-    missingDue,
     missingOwner,
     missingPriority,
-    staleOpen,
     openInArchive,
+    parseErrors,
     issueCount: issues.length,
     items: issues
       .sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || a.path.localeCompare(b.path))
@@ -141,7 +121,7 @@ export function taskMaintenanceItem(item: TaskIssue): MaintenanceItem {
     detail: item.issue,
     path: item.path,
     href: item.href,
-    meta: [item.state, item.due, item.owner, item.priority, item.updated].filter((value): value is string => Boolean(value)),
+    meta: [item.state, item.owner, item.priority].filter((value): value is string => Boolean(value)),
     severity: item.severity,
   };
 }
@@ -152,10 +132,8 @@ function taskIssue(page: PageData, state: string, issue: string, severity: Sever
     title: page.title || titleFromPath(page.filePath),
     state,
     issue,
-    due: stringValue(page.meta.due) ?? stringValue(page.frontmatter['due']),
     owner: stringValue(page.meta.owner) ?? stringValue(page.frontmatter['owner']),
     priority: stringValue(page.meta.priority) ?? stringValue(page.frontmatter['priority']),
-    updated: stringValue(page.meta.updated) ?? stringValue(page.frontmatter['updated']),
     href: pageHref(page.filePath),
     severity,
   };

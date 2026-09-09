@@ -64,7 +64,7 @@ For the browser UI, indexed search, and an MCP server your agent can call, from 
 ```bash
 cp robin/app/apps/web/.env.example robin/app/apps/web/.env.local   # then edit it: set ROBIN_VAULT
 cd robin/app && npm install                                        # install all workspaces
-npm run build --workspace=@robin/mcp-server --workspace=@robin/indexer --workspace=@robin/converter
+npm run build --workspace=@robin/converter --workspace=@robin/vault-io --workspace=@robin/memory --workspace=@robin/indexer --workspace=@robin/mcp-server
 cd -                                                               # back to repo root
 cp robin/gist/templates/mcp.json .mcp.json                         # then set {{REPO_ROOT}} + {{VAULT_DIR}}
 make robin-ui                                                      # → http://localhost:8400

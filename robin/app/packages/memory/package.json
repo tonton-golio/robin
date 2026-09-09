@@ -17,6 +17,9 @@
     "dev": "tsc --watch",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@robin/vault-io": "*"
+  },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.3",

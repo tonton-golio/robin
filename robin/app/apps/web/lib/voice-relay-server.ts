@@ -2,7 +2,9 @@
  * Boots a standalone WebSocket server for the voice relay.
  * Called once from instrumentation.ts on the Node.js runtime.
  *
- * Listens on INTERVIEW_WS_PORT (default 8401).
+ * Listens on INTERVIEW_WS_HOST (default 127.0.0.1) and INTERVIEW_WS_PORT
+ * (default 8401). A non-loopback bind is rejected unless Robin's authenticated
+ * remote mode is fully configured.
  * Accepts: ws://localhost:8401/ws/voice?brief=<slug>&token=<session-token>
  *
  * Hardening:
@@ -22,6 +24,7 @@ import { handleRelayConnection, getInterviewRuntimeConfig } from "./xai-relay";
 import { isOriginAllowed } from "./interview-origin";
 import { verifySessionToken } from "./interview-session-token";
 import { safeInterviewSlug } from "./interview-constants";
+import { getVoiceRelayBindConfig } from "./runtime-security";
 
 // Heartbeat: ping every interval; a socket that misses a pong by the next tick
 // is considered dead and terminated (frees the upstream xAI socket too).
@@ -84,10 +87,15 @@ function attachHeartbeat(h: RelayHandle, wss: WebSocketServer): void {
   h.heartbeat.unref?.();
 }
 
-function bindServer(port: number, attempt: number): void {
+function displayHost(host: string): string {
+  return host.includes(":") ? `[${host}]` : host;
+}
+
+function bindServer(host: string, port: number, attempt: number): void {
   const h = handle();
 
   const wss = new WebSocketServer({
+    host,
     port,
     // Reject disallowed origins before the handshake completes. Token validation
     // happens in the connection handler (we need the parsed URL there anyway).
@@ -103,7 +111,7 @@ function bindServer(port: number, attempt: number): void {
   h.wss = wss;
 
   wss.on("listening", () => {
-    console.log(`[voice-relay] WS server listening on ws://localhost:${port}/ws/voice`);
+    console.log(`[voice-relay] WS server listening on ws://${displayHost(host)}:${port}/ws/voice`);
   });
 
   wss.on("connection", (ws: LiveSocket, req: IncomingMessage) => {
@@ -146,12 +154,12 @@ function bindServer(port: number, attempt: number): void {
       h.wss = null;
       if (attempt < MAX_BIND_RETRIES) {
         console.warn(
-          `[voice-relay] port ${port} in use, retry ${attempt + 1}/${MAX_BIND_RETRIES} in ${BIND_RETRY_DELAY_MS}ms`,
+          `[voice-relay] ${displayHost(host)}:${port} in use, retry ${attempt + 1}/${MAX_BIND_RETRIES} in ${BIND_RETRY_DELAY_MS}ms`,
         );
-        setTimeout(() => bindServer(port, attempt + 1), BIND_RETRY_DELAY_MS);
+        setTimeout(() => bindServer(host, port, attempt + 1), BIND_RETRY_DELAY_MS);
       } else {
         console.error(
-          `[voice-relay] port ${port} still in use after ${MAX_BIND_RETRIES} retries; giving up. ` +
+          `[voice-relay] ${displayHost(host)}:${port} still in use after ${MAX_BIND_RETRIES} retries; giving up. ` +
             `Set INTERVIEW_WS_PORT to a free port or stop the process holding it.`,
         );
         h.starting = false;
@@ -190,6 +198,12 @@ export function startVoiceRelayServer(): void {
   if (h.wss || h.starting) return;
   h.starting = true;
 
+  const bind = getVoiceRelayBindConfig();
+  if (!bind.ok) {
+    console.error(`[voice-relay] refusing to start: ${bind.reason}`);
+    h.starting = false;
+    return;
+  }
   const port = getInterviewRuntimeConfig().wsPort;
 
   if (!h.cleanupRegistered) {
@@ -207,7 +221,7 @@ export function startVoiceRelayServer(): void {
     process.once("beforeExit", teardown);
   }
 
-  bindServer(port, 0);
+  bindServer(bind.host, port, 0);
 }
 
 /** Exposed for tests / explicit shutdown. */

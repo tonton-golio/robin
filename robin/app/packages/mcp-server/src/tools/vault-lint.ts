@@ -14,6 +14,39 @@ import type { ToolContext, VaultLintOutput, LintIssue, LintCheck } from '../type
 
 const REQUIRED_META_FIELDS = ['robin:type', 'robin:slug', 'robin:path', 'robin:updated'];
 
+/**
+ * Framework-default lint exemptions.
+ *
+ * Broken-wikilink check: archived material (pages under inbox/archived/ or any
+ * archive/ directory segment) legitimately references pages that have since
+ * moved or been pruned, so those pages are skipped as SOURCES of the links
+ * check. Wikilinks pointing AT archived pages are still checked from live
+ * pages.
+ *
+ * Orphan check: operational logs, shareable artifacts, immutable sources, and
+ * archives are leaf records — not knowledge pages expected to accrue inbound
+ * wikilinks — so pages under these areas are never flagged as orphans.
+ */
+const LINK_CHECK_EXEMPT_SOURCE_PREFIXES = ['inbox/archived/'] as const;
+const ORPHAN_CHECK_EXEMPT_PREFIXES = ['logs/', 'out/', 'inbox/'] as const;
+/** Matches any path containing an `archive/` directory segment (top-level or nested). */
+const ARCHIVE_SEGMENT_RE = /(^|\/)archive\//;
+
+const underAny = (relPath: string, prefixes: readonly string[]): boolean =>
+  prefixes.some((prefix) => relPath.startsWith(prefix));
+
+/** True when `relPath` is exempt as a SOURCE of the broken-wikilink check. */
+function isLinkCheckExempt(relPath: string): boolean {
+  const p = relPath.replace(/\\/g, '/');
+  return underAny(p, LINK_CHECK_EXEMPT_SOURCE_PREFIXES) || ARCHIVE_SEGMENT_RE.test(p);
+}
+
+/** True when `relPath` is exempt from the orphan check. */
+function isOrphanCheckExempt(relPath: string): boolean {
+  const p = relPath.replace(/\\/g, '/');
+  return underAny(p, ORPHAN_CHECK_EXEMPT_PREFIXES) || ARCHIVE_SEGMENT_RE.test(p);
+}
+
 export const VaultLintInputSchema = z.object({
   check: z
     .array(z.enum(['frontmatter', 'links', 'orphans', 'staleness']))
@@ -88,7 +121,8 @@ export async function vaultLint(
     }
 
     // ── link checks (broken wikilinks) ───────────────────────────────────
-    if (checks.has('links')) {
+    // Archived sources are exempt: their targets may have moved or been pruned.
+    if (checks.has('links') && !isLinkCheckExempt(relPath)) {
       for (const target of parsed.wikilinkTargets) {
         if (!resolves(target)) {
           // Check indexer for aliases
@@ -174,6 +208,8 @@ export async function vaultLint(
       if (type === 'index' || type === 'meeting' || type === 'interview') continue;
       // _index pages are hubs, not orphans
       if (path.basename(relPath, '.html') === '_index') continue;
+      // Logs, artifacts, sources, and archives are leaf records, not orphans
+      if (isOrphanCheckExempt(relPath)) continue;
 
       if (!isLinked(relPath, slug)) {
         issues.push({

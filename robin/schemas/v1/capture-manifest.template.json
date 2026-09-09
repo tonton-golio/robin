@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "capture_id": "00000000-0000-4000-8000-000000000000",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "mime": "application/octet-stream",
+  "source_kind": "manual",
+  "source_ref": "inbox/source/example.bin",
+  "sensitivity": "private",
+  "retention": "standard",
+  "state": "landed",
+  "derived_outputs": [],
+  "captured_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

@@ -7,13 +7,28 @@
  * This prevents access-counter pollution from canonical saves.
  */
 
-import chokidar from 'chokidar';
-import path from 'path';
-import type Database from 'better-sqlite3';
-import { indexFile, recomputeWikilink, hasVecTable } from './index-file.js';
+import chokidar from "chokidar";
+import path from "path";
+import type Database from "better-sqlite3";
+import { indexFile, recomputeWikilink, hasVecTable } from "./index-file.js";
+import { INDEXED_PAGE_ROOTS, isIndexedPagePath } from "./types.js";
 
-export type WatchEvent = 'add' | 'change' | 'unlink';
+export type WatchEvent = "add" | "change" | "unlink";
 export type WatchCallback = (event: WatchEvent, filePath: string) => void;
+
+/** Remove one vault-relative page and all path/slug/vector projections. */
+export function removeIndexedPath(db: Database.Database, relPath: string): void {
+  const row = db.prepare("SELECT rowid, slug FROM pages WHERE path = ?").get(relPath) as
+    | { rowid: number; slug: string }
+    | undefined;
+
+  if (row && hasVecTable(db)) {
+    db.prepare("DELETE FROM pages_vec WHERE rowid = ?").run(BigInt(row.rowid));
+  }
+  db.prepare("DELETE FROM pages WHERE path = ?").run(relPath);
+  db.prepare("DELETE FROM links WHERE from_path = ?").run(relPath);
+  if (row) recomputeWikilink(db, row.slug);
+}
 
 export class Watcher {
   private readonly vaultPath: string;
@@ -25,6 +40,7 @@ export class Watcher {
   private readonly recentlyWrittenByUs = new Map<string, number>();
 
   private watcher: ReturnType<typeof chokidar.watch> | null = null;
+  private readyPromise: Promise<void> = Promise.resolve();
 
   // Serialize all indexing work onto a single promise chain. chokidar fires
   // listeners fire-and-forget (it does not await them) and indexFile yields at
@@ -67,35 +83,62 @@ export class Watcher {
 
   /** Start watching. Returns this for chaining. */
   start(): this {
-    const patterns = [
-      path.join(this.vaultPath, 'brain', '**', '*.html'),
-      path.join(this.vaultPath, 'out', '**', '*.html'),
-    ];
+    // Chokidar 5 no longer expands glob patterns. Watch the owned directories
+    // directly and filter files below them so raw logs and unrelated files do
+    // not enter the index.
+    const roots = INDEXED_PAGE_ROOTS.map((root) => path.join(this.vaultPath, root));
+    const isAllowedEventPath = (candidate: string): boolean => {
+      const relPath = path.relative(this.vaultPath, candidate);
+      return isIndexedPagePath(relPath);
+    };
 
-    this.watcher = chokidar.watch(patterns, {
+    this.watcher = chokidar.watch(roots, {
       persistent: true,
       ignoreInitial: true,
+      followSymlinks: false,
+      ignored: (
+        candidate: string,
+        stats?: { isDirectory(): boolean; isSymbolicLink(): boolean },
+      ) => {
+        // Keep directory traversal enabled, including directories discovered
+        // after startup. For files, only canonical HTML paths are watched.
+        if (stats?.isSymbolicLink()) return true;
+        if (stats?.isDirectory()) return false;
+        if (!stats && path.extname(candidate) === "") return false;
+        return !isAllowedEventPath(candidate);
+      },
       awaitWriteFinish: {
         stabilityThreshold: 150,
         pollInterval: 50,
       },
     });
 
-    this.watcher.on('add', (filePath: string) => this.handleEvent('add', filePath));
-    this.watcher.on('change', (filePath: string) => this.handleEvent('change', filePath));
-    this.watcher.on('unlink', (filePath: string) => this.handleUnlink(filePath));
-    this.watcher.on('error', (err: unknown) => {
-      console.error('[watcher] error:', err);
+    this.readyPromise = new Promise<void>((resolve, reject) => {
+      this.watcher?.once("ready", resolve);
+      this.watcher?.once("error", reject);
+    });
+
+    this.watcher.on("add", (filePath: string) => this.handleEvent("add", filePath));
+    this.watcher.on("change", (filePath: string) => this.handleEvent("change", filePath));
+    this.watcher.on("unlink", (filePath: string) => this.handleUnlink(filePath));
+    this.watcher.on("error", (err: unknown) => {
+      console.error("[watcher] error:", err);
     });
 
     if (this.verbose) {
-      console.log(`[watcher] watching ${patterns.join(', ')}`);
+      console.log(`[watcher] watching ${roots.join(", ")}`);
     }
 
     return this;
   }
 
+  /** Wait until chokidar has completed its initial directory crawl. */
+  ready(): Promise<void> {
+    return this.readyPromise;
+  }
+
   private async handleEvent(event: WatchEvent, filePath: string): Promise<void> {
+    if (!isIndexedPagePath(path.relative(this.vaultPath, filePath))) return;
     if (this.shouldIgnore(filePath)) {
       if (this.verbose) console.log(`[watcher] ignoring self-write: ${filePath}`);
       return;
@@ -117,6 +160,7 @@ export class Watcher {
   }
 
   private async handleUnlink(filePath: string): Promise<void> {
+    if (!isIndexedPagePath(path.relative(this.vaultPath, filePath))) return;
     if (this.shouldIgnore(filePath)) return;
     if (this.verbose) console.log(`[watcher] unlink: ${filePath}`);
 
@@ -125,39 +169,14 @@ export class Watcher {
     // interleave with an in-flight indexFile (which awaits embed mid-sequence).
     this.indexChain = this.indexChain
       .then(() => {
-        // Read rowid + slug BEFORE deleting the page — the rowid is needed to
-        // drop the matching embedding (pages_vec is keyed by pages.rowid and is
-        // NOT cleaned by the FTS triggers; leaving it leaks, and because pages
-        // is a rowid table SQLite reuses the id for the next inserted page,
-        // silently mis-attributing the stale vector to a different page).
-        const row = this.db
-          .prepare('SELECT rowid, slug FROM pages WHERE path = ?')
-          .get(relPath) as { rowid: number; slug: string } | undefined;
-
-        if (row && hasVecTable(this.db)) {
-          // sqlite-vec requires BigInt for rowid (mirrors index-file.ts).
-          this.db
-            .prepare('DELETE FROM pages_vec WHERE rowid = ?')
-            .run(BigInt(row.rowid));
-        }
-
-        // Remove from pages (triggers also clean up FTS via triggers)
-        this.db.prepare('DELETE FROM pages WHERE path = ?').run(relPath);
-        // Links are keyed by from_path, so drop exactly this file's outbound
-        // links — a same-slug sibling's links live under its own path and survive.
-        this.db.prepare('DELETE FROM links WHERE from_path = ?').run(relPath);
-        if (row) {
-          // The slug→path resolver is still slug-keyed; recompute from whatever
-          // pages remain (clears it when none are left, de-ambiguates survivors).
-          recomputeWikilink(this.db, row.slug);
-        }
+        removeIndexedPath(this.db, relPath);
       })
       .catch((err) => {
         console.error(`[watcher] delete failed for ${relPath}:`, err);
       });
     await this.indexChain;
 
-    this.onEvent?.('unlink', filePath);
+    this.onEvent?.("unlink", filePath);
   }
 
   /** Stop the watcher. */

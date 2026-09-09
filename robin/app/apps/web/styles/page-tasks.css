@@ -1,0 +1,1343 @@
+/* Robin page styles — tasks. Owner: tasks page. "Quiet Slate" v2.
+   Colours via tokens only. Separation is surface + soft elevation: a thing
+   carries a border OR a shadow, never both, and prefers the shadow. Soft 6px
+   radius family; 999px on status pills and dots. The rollup is no longer a
+   blue field — it is a level-2 card with an accent left rule, and every status
+   colour arrives as a pill (wash fill + coloured text). Kanban columns are
+   level-1 surfaces; their cards lift to level 2 on hover. Signal red ONLY for
+   overdue + destructive. Mono for data, and nothing below 11px. */
+
+.tasks-page {
+  max-width: 1120px;
+  padding-bottom: 72px;
+  position: relative;
+}
+
+/* ── page status line ─────────────────────────────────────────── */
+.tk-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.tk-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.tk-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  display: inline-block;
+}
+.tk-live.on i {
+  background: var(--blue);
+  animation: tk-pulse-dot 2.2s ease-in-out infinite;
+}
+@keyframes tk-pulse-dot {
+  50% {
+    opacity: 0.3;
+  }
+}
+.tk-fresh {
+  font-size: var(--meta-size);
+}
+.tk-pagebar {
+  display: inline-block;
+  margin: 2px 0 0;
+}
+
+/* ── rollup — a level-2 card with an accent left rule. The 3px spine is an
+   accent marker, not an outline: the card itself has no border. ─────────── */
+.tk-rollup {
+  background: var(--card);
+  color: var(--ink);
+  margin: 16px 0 0;
+  padding: 16px 18px 14px;
+  border: none;
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius);
+  box-shadow: var(--offset);
+  position: relative;
+}
+.tk-rollup-corner {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: var(--lab-size);
+  color: var(--muted);
+}
+.tk-rollup-t {
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  max-width: 62ch;
+}
+.tk-rollup-counts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.tk-cbtn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: 600;
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+/* hover stays quiet; the accent wash is reserved for the pressed (active
+   filter) state so you can always tell which count filter is on */
+.tk-cbtn:hover {
+  color: var(--ink);
+  background: var(--card);
+}
+.tk-cbtn[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.tk-cbtn-n {
+  font-family: var(--font-mono);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  margin-right: 5px;
+}
+/* overdue count reads red at every state — no hardcoded tint any more */
+.tk-cbtn.od .tk-cbtn-n {
+  color: var(--red);
+}
+.tk-cbtn.od:hover {
+  background: var(--card);
+  color: var(--red);
+}
+.tk-cbtn.od[aria-pressed='true'] {
+  background: var(--red-wash);
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.tk-cbtn.od:hover .tk-cbtn-n,
+.tk-cbtn.od[aria-pressed='true'] .tk-cbtn-n {
+  color: var(--red);
+}
+.tk-rollup-m {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-top: 10px;
+}
+/* band open → the rollup drops its accent rule entirely and recedes one level
+   (one marked element at a time). No neutral spine is left behind: the
+   recede-one-level state is carried by elevation alone. */
+.tk-rollup.outline {
+  border-left: none;
+  box-shadow: var(--offset-sm);
+}
+.tk-rollup.outline .tk-cbtn {
+  border-color: var(--line);
+  color: var(--ink);
+}
+.tk-rollup.outline .tk-cbtn:hover {
+  color: var(--ink);
+  background: var(--card);
+}
+.tk-rollup.outline .tk-cbtn[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.tk-rollup.outline .tk-cbtn.od .tk-cbtn-n {
+  color: var(--red);
+}
+
+/* ── view tabs — the tab strip's baseline is one of the structural --line
+   cases; the selected tab is a wash plus an accent spine, not an ink brick ── */
+.tk-views {
+  display: flex;
+  gap: 2px;
+  margin: 20px 0 0;
+  border-bottom: 1px solid var(--line);
+  align-items: flex-end;
+}
+.tk-view {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 9px 16px 8px;
+  cursor: pointer;
+}
+/* unselected tabs change text colour only on hover, so they never compete with
+   the accent-wash selected tab (matches the activity lens strip) */
+.tk-view:hover {
+  color: var(--ink);
+}
+.tk-view[aria-selected='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+.tk-view .k,
+.tk-act .k,
+.tk-key {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  /* keycaps read at their parent's colour (--ink or --muted). Never dimmed
+     with opacity: --muted at .6 measures 2.41:1 (spec 10a). */
+  margin-left: 6px;
+  text-transform: none;
+}
+.tk-grow {
+  flex: 1;
+}
+.tk-caltoggle {
+  border: none;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 8px 12px 7px;
+  cursor: pointer;
+}
+.tk-caltoggle[aria-expanded='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+
+/* ── calendar band — level-1 surface ──────────────────────────── */
+.tk-calband {
+  border: none;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  margin: 16px 0 0;
+}
+.tk-calhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--hairline);
+  padding: 9px 12px;
+}
+.tk-calmodes {
+  display: flex;
+  gap: 2px;
+}
+.tk-calmode {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: 600;
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: 999px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.tk-calmode[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.tk-calgen {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-left: auto;
+}
+.tk-calgen.stale {
+  color: var(--red);
+}
+.tk-callegend {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  padding: 8px 12px 0;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.tk-sw {
+  display: inline-block;
+  width: 22px;
+  height: 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+.tk-sw.ev {
+  background: var(--blue);
+}
+.tk-sw.gh {
+  border: 1px dashed var(--line);
+  background: transparent;
+}
+.tk-calbody {
+  padding: 10px 12px 14px;
+  overflow-x: auto;
+}
+
+/* DayRail */
+.tk-dayrail {
+  position: relative;
+  margin-top: 6px;
+  min-width: 520px;
+}
+.tk-hours {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 3px;
+}
+.tk-track {
+  position: relative;
+  height: 40px;
+  border-bottom: 1px solid var(--hairline);
+}
+/* NOW = a 1px accent line with a round accent head */
+.tk-now {
+  position: absolute;
+  top: -3px;
+  bottom: 0;
+  width: 1px;
+  background: var(--blue);
+}
+.tk-now::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: -2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+.tk-cbar {
+  position: absolute;
+  height: 20px;
+  top: 9px;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  padding: 2px 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  text-align: left;
+}
+.tk-cbar.ev {
+  background: var(--accent-wash);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+.tk-cbar.gh {
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+.tk-rz {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  border-left: 1px solid currentColor;
+  opacity: 0.5;
+}
+
+/* WeekStrip */
+.tk-weekstrip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  min-width: 620px;
+}
+.tk-wcol {
+  border: none;
+  background: var(--card-2);
+  border-radius: var(--radius-sm);
+  min-height: 80px;
+  padding: 5px;
+}
+.tk-wd {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 3px;
+  margin-bottom: 5px;
+}
+.tk-wcol.today .tk-wd {
+  color: var(--blue);
+  font-weight: 650;
+}
+.tk-wev {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  border-radius: var(--radius-sm);
+  padding: 3px 5px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tk-wev.ev {
+  background: var(--accent-wash);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+.tk-wev.gh {
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+
+/* AssigneeTimeline */
+.tk-timeline {
+  display: flex;
+  flex-direction: column;
+  min-width: 560px;
+}
+.tk-tlhead {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--hairline);
+}
+.tk-tldays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.tk-tldays span {
+  padding: 2px 4px;
+  border-left: 1px solid var(--hairline);
+}
+.tk-tlane {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  min-height: 34px;
+}
+.tk-who {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 4px 8px;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.tk-who:hover {
+  background: var(--card);
+}
+.tk-who[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+.tk-tltrack {
+  position: relative;
+  height: 34px;
+}
+.tk-tlbar {
+  position: absolute;
+  top: 7px;
+  height: 18px;
+  background: var(--accent-wash);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--blue);
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  padding: 1px 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: grab;
+  border: none;
+  border-radius: var(--radius-sm);
+  touch-action: none;
+}
+.tk-tlbar.od {
+  background: var(--red-wash);
+  color: var(--red);
+  box-shadow: inset 2px 0 0 var(--red);
+}
+/* done bars recede by colour, not opacity - the bar carries an 11px mono label
+   that must stay readable (spec 10a) */
+.tk-tlbar.done {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  box-shadow: inset 2px 0 0 var(--muted);
+}
+.tk-tlbar-t {
+  pointer-events: none;
+}
+
+/* ── controls ──────────────────────────────────────────────────── */
+.tk-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0 0;
+}
+.tk-fgroup {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tk-flabel {
+  font-size: var(--lab-size);
+  width: 64px;
+  flex: none;
+}
+.tk-chip {
+  display: inline-block;
+  font-size: var(--lab-size);
+  font-weight: 600;
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+}
+.tk-chip:hover {
+  background: var(--card);
+}
+.tk-chip[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.tk-chip .cnt {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  margin-left: 6px;
+  /* secondary tier by colour, not opacity (spec 10a) */
+  color: var(--muted);
+}
+.tk-chip[aria-pressed='true'] .cnt {
+  /* on the accent wash --muted drops to 4.20:1, so the count goes to --ink */
+  color: var(--ink);
+}
+.tk-searchrow {
+  display: flex;
+  align-items: center;
+  max-width: 520px;
+  flex: 1;
+  min-width: 220px;
+}
+.tk-searchrow .lab {
+  background: var(--card-2);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  padding: 9px 11px;
+  flex: none;
+}
+.tk-searchrow input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 8px 11px;
+  outline: none;
+}
+/* a control, not an eyebrow: sentence case, no caps transform, no tracking */
+.tk-togglebtn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 5px 0 4px;
+}
+.tk-togglebtn[aria-pressed='true'] {
+  color: var(--ink);
+}
+
+/* ── countline / overload ──────────────────────────────────────── */
+.tk-countline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--hairline);
+  margin: 20px 0 0;
+  padding-bottom: 8px;
+}
+.tk-countline .n {
+  font-size: var(--lab-size);
+}
+.tk-overloadstrip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: none;
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-top: 16px;
+  font-size: 12px;
+  box-shadow: inset 3px 0 0 var(--blue), var(--offset-sm);
+}
+.tk-os-m {
+  color: var(--muted);
+}
+
+/* ── tree ──────────────────────────────────────────────────────── */
+.tk-outcome {
+  margin: 24px 0 0;
+}
+.tk-obar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  color: var(--ink);
+}
+.tk-obar .r-bar {
+  flex: none;
+}
+.tk-om {
+  font-size: var(--meta-size);
+}
+.tk-obar::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+  align-self: center;
+}
+.tk-chev {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.tk-obar.drop {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.tk-ws {
+  border-left: 1px solid var(--hairline);
+  margin: 14px 0 0 6px;
+  padding: 0 0 4px 16px;
+}
+.tk-wshead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 4px 0 6px;
+  cursor: pointer;
+}
+.tk-wt {
+  font-weight: 650;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+.tk-wm {
+  font-size: var(--lab-size);
+}
+.tk-wshead .tk-chev {
+  margin-left: auto;
+}
+.tk-wshead.drop {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* leaf row */
+.tk-leaf-drag {
+  cursor: grab;
+}
+.tk-leaf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 10px 8px 9px;
+  position: relative;
+}
+.tk-leaf:hover {
+  background: var(--card);
+}
+/* selected row = level 2 + accent spine (the shared dense-list grammar; the
+   spine is what tells "selected" from "hovered", since both are --card).
+   Borders stay transparent so the row never shifts. */
+.tk-leaf.is-sel {
+  background: var(--card);
+  border-color: transparent;
+  box-shadow: var(--offset), inset 2px 0 0 var(--blue);
+  z-index: 1;
+}
+/* error is marked with a red spine, matching .tk-tcard.is-error */
+.tk-leaf.is-error {
+  box-shadow: inset 2px 0 0 var(--red);
+}
+.tk-leaf.is-done .tk-title a {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.tk-title {
+  font-weight: 650;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+}
+.tk-title a {
+  color: inherit;
+  text-decoration: none;
+}
+.tk-title a:hover {
+  text-decoration: underline;
+}
+.tk-path {
+  font-size: var(--lab-size);
+  color: var(--muted);
+}
+.tk-prov {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.tk-prov .note {
+  color: var(--ink);
+}
+.tk-prov.err,
+.tk-prov.err .note {
+  color: var(--red);
+}
+.tk-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 1px;
+}
+.tk-due {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tk-due.od {
+  color: var(--red);
+  font-weight: 650;
+}
+.tk-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+}
+.tk-leaf.is-flash::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: -1px;
+  width: 2px;
+  background: var(--blue);
+  animation: tk-flashfade 2.4s ease-out forwards;
+}
+@keyframes tk-flashfade {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tk-leaf.is-flash::after {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* status pills — 999px, micro-label, wash fills only */
+.tk-pill {
+  display: inline-block;
+  font-size: var(--lab-size);
+  font-weight: 600;
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  border-radius: 999px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tk-pill.todo {
+  background: transparent;
+  color: var(--ink);
+}
+.tk-pill.inprog {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.tk-pill.blocked {
+  background: transparent;
+  color: var(--ink);
+  border-style: dashed;
+}
+.tk-pill.done {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--line);
+}
+.tk-pill.done::before {
+  content: '✓ ';
+}
+.tk-pill.saving {
+  background: transparent;
+  border-style: dashed;
+  color: var(--muted);
+}
+
+/* action buttons */
+.tk-act {
+  border: none;
+  background: var(--card);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink);
+  transition: box-shadow 120ms ease, background-color 120ms ease;
+}
+.tk-act:hover {
+  background: var(--card-2);
+  box-shadow: var(--offset);
+}
+.tk-act:active {
+  box-shadow: none;
+}
+.tk-act.danger {
+  color: var(--red);
+}
+.tk-act.danger:hover {
+  background: var(--red-wash);
+  color: var(--red);
+}
+.tk-btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+  box-shadow: var(--offset-sm);
+}
+
+/* inline log editor — nested panel, one level up from the row */
+.tk-logbox {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  border: none;
+  background: var(--card-2);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+}
+.tk-lh {
+  border-bottom: 1px solid var(--hairline);
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.tk-entries {
+  max-height: 150px;
+  overflow: auto;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.tk-e {
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--hairline);
+}
+.tk-e .em {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.tk-addrow {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--hairline);
+}
+.tk-addrow input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 6px 9px;
+  outline: none;
+}
+
+/* due popover */
+.tk-duepop {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  border: none;
+  background: var(--card-2);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 10px 12px;
+}
+.tk-dl {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.tk-steps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tk-sep {
+  color: var(--muted);
+}
+
+/* clear confirm — destructive, so it is a red wash marked with a red spine
+   (the same grammar as .tk-statebox.err and .tk-tcard.is-error), not an outline */
+.tk-clrconf {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  border: none;
+  box-shadow: inset 3px 0 0 var(--red);
+  border-radius: var(--radius);
+  background: var(--red-wash);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.tk-ct {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--red);
+  margin-bottom: 6px;
+}
+.tk-btnrow {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* add-leaf — a non-structural dashed frame, so it uses the separator token */
+.tk-addleaf {
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: transparent;
+  margin: 8px 0 0;
+  padding: 9px 10px;
+}
+.tk-arow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tk-arow input {
+  flex: 1;
+  min-width: 180px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 7px 10px;
+  outline: none;
+}
+.tk-contract {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.tk-addleaf-trigger {
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 6px 10px;
+  cursor: pointer;
+  margin: 8px 0 0;
+  width: 100%;
+  text-align: left;
+}
+.tk-addleaf-trigger:hover {
+  color: var(--ink);
+  background: var(--card);
+}
+
+/* ── board — columns are level-1 surfaces, cards lift to level 2 on hover ── */
+.tk-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+@media (max-width: 980px) {
+  .tk-board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .tk-board {
+    grid-template-columns: 1fr;
+  }
+}
+.tk-bcol {
+  min-width: 0;
+}
+.tk-bcolhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.tk-col-count {
+  font-size: var(--lab-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.tk-bcol.drop .tk-cards {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+/* blocked column marker: a quiet neutral pill, not an outlined ink brick */
+.tk-bcolhead.blocked .r-bar {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.tk-cards {
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 10px;
+}
+.tk-tcard {
+  background: var(--card-2);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 12px 12px 11px;
+  position: relative;
+  cursor: grab;
+  transition: box-shadow 120ms ease;
+}
+.tk-tcard:hover {
+  box-shadow: var(--offset);
+}
+.tk-tcard.is-error {
+  box-shadow: inset 2px 0 0 var(--red), var(--offset-sm);
+}
+/* selection = the shared accent spine; the outline device is reserved for
+   :focus-visible, so the two states stay distinguishable */
+.tk-tcard.is-sel {
+  box-shadow: var(--offset), inset 2px 0 0 var(--blue);
+}
+.tk-tcard .tk-ct {
+  font-weight: 650;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--ink);
+  margin: 0 0 7px;
+}
+.tk-tcard .tk-ct a {
+  color: inherit;
+  text-decoration: none;
+}
+.tk-tcard .tk-ct a:hover {
+  text-decoration: underline;
+}
+.tk-crow2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tk-tcard .tk-prov {
+  margin-top: 6px;
+}
+.tk-tcard.is-flash {
+  animation: tk-cardflash 2.4s ease-out forwards;
+}
+@keyframes tk-cardflash {
+  0% {
+    box-shadow: 0 0 0 2px var(--blue), var(--offset);
+  }
+  100% {
+    box-shadow: var(--offset-sm);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tk-tcard.is-flash {
+    animation: none;
+  }
+}
+.tk-col-overflow {
+  font-size: var(--lab-size);
+  color: var(--muted);
+  padding: 4px 2px;
+}
+
+/* ── states ────────────────────────────────────────────────────── */
+.tk-statebox {
+  border: none;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset);
+  padding: 22px 24px 26px;
+  margin-top: 30px;
+  max-width: 640px;
+}
+/* the error variant is marked with a red spine, not an outline */
+.tk-statebox.err {
+  box-shadow: inset 3px 0 0 var(--red), var(--offset);
+}
+.tk-bar-err {
+  background: var(--red-wash);
+  color: var(--red);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.tk-sb-t {
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  margin: 12px 0 6px;
+}
+.tk-statebox p {
+  font-size: 13px;
+  max-width: 58ch;
+  margin: 6px 0;
+}
+.tk-sb-m {
+  font-size: var(--meta-size);
+  color: var(--muted);
+  margin-top: 12px;
+}
+.tk-sb-btns {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+}
+.tk-skel {
+  margin-top: 20px;
+}
+.tk-skelrow {
+  border-bottom: 1px solid var(--hairline);
+  padding: 14px 8px;
+}
+.tk-sk {
+  background: var(--ink);
+  opacity: 0.1;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  animation: tk-pulse 1.2s ease-in-out infinite;
+}
+@keyframes tk-pulse {
+  0%,
+  100% {
+    opacity: 0.08;
+  }
+  50% {
+    opacity: 0.18;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tk-sk {
+    animation: none;
+  }
+}
+
+/* ── move picker overlay — level 3 ─────────────────────────────── */
+.tk-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--shadow-ink) 60%, transparent);
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 9vh;
+}
+.tk-sheet {
+  background: var(--card-2);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--offset-lg);
+  width: min(600px, 92vw);
+  padding: 0 0 12px;
+  overflow: hidden;
+}
+.tk-sheet .r-bar {
+  display: block;
+}
+.tk-movepick input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  padding: 12px 16px;
+  outline: none;
+}
+.tk-opts {
+  max-height: 50vh;
+  overflow: auto;
+}
+.tk-opt {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 9px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+}
+/* selected option = the 2px selection spine (3px is the banner/error spine) */
+.tk-opt.sel {
+  background: var(--accent-wash);
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+.tk-lvl {
+  font-size: var(--lab-size);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--muted);
+}
+.tk-optp {
+  font-size: var(--lab-size);
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ── footer ───────────────────────────────────────────────────── */
+.tk-footsrc {
+  margin-top: 22px;
+  font-size: var(--meta-size);
+  color: var(--muted);
+}
+
+/* focus ring
+
+   These inputs each set `outline: none` for the mouse case, and a class
+   selector outscores the global `:where(...):focus-visible` fallback in
+   primitives.css (`:where()` contributes zero specificity), so the shared
+   ring has to be restated here at matching specificity. */
+.tk-searchrow input:focus-visible,
+.tk-addrow input:focus-visible,
+.tk-arow input:focus-visible,
+.tk-movepick input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

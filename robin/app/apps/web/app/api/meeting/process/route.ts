@@ -7,7 +7,9 @@
  *   - title:            a short human meeting title (not a slug)
  *   - summary:          a 2–4 sentence TL;DR
  *   - keyPoints:        the main points discussed
- *   - actionItems:      follow-ups, each with an optional owner
+ *   - decisions:        explicit or inferred decisions, with evidence state
+ *   - actionItems:      commitments with owner, checkpoint, and evidence state
+ *   - conflicts:        explicit corrections or contradictory claims that need judgment
  *   - speakers:         inferred real names per "Speaker N" label (best effort)
  *   - cleanedTranscript: conservative cleanup of the transcript — filler words,
  *                        false starts and obvious STT errors removed, fragmented
@@ -20,6 +22,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  coerceMeetingSignals,
+  type MeetingCommitmentSignal,
+  type MeetingConflictSignal,
+  type MeetingDecisionSignal,
+} from '@/lib/meeting-signals';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,16 +35,13 @@ export const dynamic = 'force-dynamic';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
 
-interface ActionItem {
-  text: string;
-  owner: string | null;
-}
-
 interface ProcessResult {
   title: string;
   summary: string;
   keyPoints: string[];
-  actionItems: ActionItem[];
+  decisions: MeetingDecisionSignal[];
+  actionItems: MeetingCommitmentSignal[];
+  conflicts: MeetingConflictSignal[];
   speakers: Record<string, string>;
   cleanedTranscript: string;
 }
@@ -56,6 +61,12 @@ const SYSTEM_PROMPT = [
   '',
   'For speaker names: infer each speaker\'s real name ONLY when the transcript makes it clear',
   '(self-introduction, being addressed by name, or a strong attendee match). If unsure, use "".',
+  '',
+  'For structured signals, preserve uncertainty instead of inventing certainty:',
+  '  - "reported" means someone explicitly stated the decision or commitment.',
+  '  - "inferred" means the wording implies it but no explicit promise/decision was made.',
+  '  - Conflicts are only explicit corrections or contradictory claims in the transcript.',
+  'Never invent an owner, date, existing value, or proposed value. Use null when unknown.',
 ].join('\n');
 
 function buildUserPrompt(input: {
@@ -73,12 +84,15 @@ function buildUserPrompt(input: {
 
   return [
     meta.length ? meta.join('\n') : null,
+    `Today is ${new Date().toISOString().slice(0, 10)} (UTC). Resolve relative due dates only when unambiguous.`,
     'Return JSON with exactly this shape:',
     `{
   "title": "short human meeting title, <= 8 words, no date",
   "summary": "2-4 sentence plain-language TL;DR of what happened and was decided",
   "keyPoints": ["the main points discussed, one per item"],
-  "actionItems": [{ "text": "the follow-up", "owner": "name or null" }],
+  "decisions": [{ "text": "the decision", "evidenceState": "reported or inferred" }],
+  "actionItems": [{ "text": "the promised outcome or follow-up", "owner": "name or null", "due": "YYYY-MM-DD or null", "evidenceState": "reported or inferred" }],
+  "conflicts": [{ "subject": "what the values describe", "existingValue": "the earlier/current value", "proposedValue": "the corrected/new value", "question": "the concise judgment question" }],
   "speakers": { "Speaker 0": "inferred name or empty string", "Speaker 1": "" },
   "cleanedTranscript": "**Speaker 0:** ...\\n\\n**Speaker 1:** ... (full conservatively-cleaned transcript)"
 }`,
@@ -101,20 +115,11 @@ function coerceResult(raw: unknown, fallbackTranscript: string): ProcessResult {
     ? obj.keyPoints.map((p) => String(p).trim()).filter(Boolean)
     : [];
 
-  const actionItems: ActionItem[] = Array.isArray(obj.actionItems)
-    ? obj.actionItems
-        .map((item) => {
-          if (item && typeof item === 'object') {
-            const rec = item as Record<string, unknown>;
-            const text = typeof rec.text === 'string' ? rec.text.trim() : '';
-            const ownerRaw = rec.owner;
-            const owner = typeof ownerRaw === 'string' && ownerRaw.trim() ? ownerRaw.trim() : null;
-            return { text, owner };
-          }
-          return { text: String(item).trim(), owner: null };
-        })
-        .filter((a) => a.text)
-    : [];
+  const signals = coerceMeetingSignals({
+    decisions: obj.decisions,
+    commitments: obj.actionItems,
+    conflicts: obj.conflicts,
+  });
 
   const speakers: Record<string, string> = {};
   if (obj.speakers && typeof obj.speakers === 'object') {
@@ -128,7 +133,16 @@ function coerceResult(raw: unknown, fallbackTranscript: string): ProcessResult {
       ? obj.cleanedTranscript.trim()
       : fallbackTranscript;
 
-  return { title, summary, keyPoints, actionItems, speakers, cleanedTranscript };
+  return {
+    title,
+    summary,
+    keyPoints,
+    decisions: signals.decisions,
+    actionItems: signals.commitments,
+    conflicts: signals.conflicts,
+    speakers,
+    cleanedTranscript,
+  };
 }
 
 // Models sometimes wrap JSON in ```json fences despite instructions.

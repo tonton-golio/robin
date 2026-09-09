@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robin.local/schemas/v1/edit-event.schema.json",
+  "title": "Robin edit event",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/created"
+    },
+    {
+      "$ref": "#/$defs/saved"
+    },
+    {
+      "$ref": "#/$defs/deleted"
+    },
+    {
+      "$ref": "#/$defs/reverted"
+    },
+    {
+      "$ref": "#/$defs/moved"
+    }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": [
+        "id",
+        "event",
+        "page_path",
+        "ts",
+        "origin",
+        "before_hash",
+        "after_hash",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "event": {
+          "type": "string"
+        },
+        "page_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!\\.\\.?(?:/|$))(?!.*//)(?!.*\\/\\.\\.?(?:/|$))(?!.*\\\\)[^\\r\\n]+$"
+        },
+        "previous_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!\\.\\.?(?:/|$))(?!.*//)(?!.*\\/\\.\\.?(?:/|$))(?!.*\\\\)[^\\r\\n]+$"
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "origin": {
+          "enum": ["agent", "cli", "mcp", "web"]
+        },
+        "actor": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "before_hash": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after_hash": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snapshot": {
+          "type": "string",
+          "pattern": "^\\.history/(?!/)(?!\\.\\.?(?:/|$))(?!.*//)(?!.*\\/\\.\\.?(?:/|$))(?!.*\\\\)[^\\r\\n]+\\.html$"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "status": {
+          "enum": ["ingested", "open", "reverted"]
+        },
+        "schema_version": {
+          "const": 2
+        },
+        "transaction_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "diff_stat": {
+          "type": "object",
+          "required": ["added", "removed"],
+          "properties": {
+            "added": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "removed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "created": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "const": "edit.created"
+            },
+            "before_hash": {
+              "const": null
+            },
+            "after_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "not": {
+            "required": ["snapshot"]
+          }
+        }
+      ]
+    },
+    "saved": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "const": "edit.saved"
+            },
+            "before_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "after_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": ["snapshot"]
+        }
+      ]
+    },
+    "deleted": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "const": "edit.deleted"
+            },
+            "after_hash": {
+              "const": null
+            },
+            "before_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": ["snapshot"]
+        }
+      ]
+    },
+    "reverted": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "const": "edit.reverted"
+            },
+            "before_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "after_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": ["snapshot"]
+        }
+      ]
+    },
+    "moved": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "required": ["previous_path", "snapshot"],
+          "properties": {
+            "event": {
+              "const": "edit.moved"
+            },
+            "previous_path": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!/)(?!\\.\\.?(?:/|$))(?!.*//)(?!.*\\/\\.\\.?(?:/|$))(?!.*\\\\)[^\\r\\n]+$"
+            },
+            "before_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "after_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -8,15 +8,16 @@
  * vault incrementally (debounced) and on close, so a session is durable even if
  * the user never clicks "Save & Ingest".
  *
- * Live transcripts land in logs/interviews/.live/<timestamp>-<brief>.md as
+ * Live transcripts land in
+ * logs/interviews/.live/<timestamp>-<brief>-<session>.md as
  * plain markdown. The existing "Save & Ingest" flow (POST
  * /api/interview/transcript) remains the canonical path that converts to HTML
  * and indexes; this is the crash-safety net, not a replacement.
  */
 
-import fs from "node:fs";
-import fsp from "node:fs/promises";
+import crypto from "node:crypto";
 import path from "node:path";
+import { durableReplace } from "@robin/vault-io";
 import { vaultPath } from "./vault";
 
 interface Turn {
@@ -38,18 +39,16 @@ export class InterviewTranscriptStore {
   private closed = false;
   private writing = false;
   private dirtySinceWrite = false;
+  private lastWriteError: Error | null = null;
   /** The in-flight write, so close() can await it before forcing a final write. */
   private writePromise: Promise<void> = Promise.resolve();
 
   constructor(private briefSlug: string) {
     this.dir = vaultPath("logs", "interviews", ".live");
-    const stamp = this.startedAt
-      .toISOString()
-      .replace(/[:.]/g, "-")
-      .replace("T", "-")
-      .slice(0, 19);
+    const stamp = this.startedAt.toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, 19);
     const safe = briefSlug.replace(/[^a-z0-9-]/gi, "-") || "interview";
-    this.filePath = path.join(this.dir, `${stamp}-${safe}.md`);
+    const sessionId = crypto.randomUUID().slice(0, 8);
+    this.filePath = path.join(this.dir, `${stamp}-${safe}-${sessionId}.md`);
   }
 
   /** Feed a raw frame (string) coming from EITHER direction. */
@@ -157,13 +156,10 @@ export class InterviewTranscriptStore {
     // actually landing before it forces a final flush and reports success.
     this.writePromise = (async () => {
       try {
-        await fsp.mkdir(this.dir, { recursive: true });
-        // Atomic-ish: write a temp file then rename, so a crash mid-write never
-        // leaves a truncated transcript.
-        const tmp = `${this.filePath}.tmp`;
-        await fsp.writeFile(tmp, this.render(), "utf-8");
-        await fsp.rename(tmp, this.filePath);
+        await durableReplace(this.filePath, this.render());
+        this.lastWriteError = null;
       } catch (e) {
+        this.lastWriteError = e instanceof Error ? e : new Error(String(e));
         console.error("[interview-transcript] flush failed:", e);
       } finally {
         this.writing = false;
@@ -199,19 +195,8 @@ export class InterviewTranscriptStore {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    // Best-effort synchronous flush as a last resort if the process is exiting.
-    try {
-      await this.flush();
-    } catch {
-      try {
-        if (this.turns.length > 0) {
-          fs.mkdirSync(this.dir, { recursive: true });
-          fs.writeFileSync(this.filePath, this.render(), "utf-8");
-        }
-      } catch {
-        /* give up */
-      }
-    }
+    await this.flush();
+    if (this.lastWriteError) throw this.lastWriteError;
   }
 
   get path(): string {

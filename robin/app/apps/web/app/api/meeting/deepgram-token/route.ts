@@ -16,17 +16,31 @@
  */
 
 import { NextResponse } from 'next/server';
+import { guardApiRequest } from '@/lib/api-request-guard';
 import { buildMeetingKeyterms } from '@/lib/meeting-keyterms';
+import { isLoopbackHostname } from '@/lib/runtime-security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function isLoopbackHost(request: Request): boolean {
-  const host = ((request.headers.get('host') ?? '').split(':')[0] ?? '').toLowerCase();
-  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  const host = request.headers.get('host');
+  if (!host) return false;
+  try {
+    return isLoopbackHostname(new URL(`http://${host}`).hostname);
+  } catch {
+    return false;
+  }
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
+  // Guard before reading credentials, scanning vault keyterms, or making the
+  // paid token-grant request. The global proxy applies the same policy; this
+  // route-level check keeps the credential boundary intact in direct invocation
+  // tests and if routing configuration changes later.
+  const denied = guardApiRequest(request);
+  if (denied) return denied;
+
   const apiKey = process.env['DEEPGRAM_API_KEY'];
   if (!apiKey) {
     return NextResponse.json(

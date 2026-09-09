@@ -1,0 +1,32 @@
+{
+  "name": "@robin/vault-io",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Durable, coordinated Robin vault mutations with CAS, lifecycle events, receipts, and safe recovery.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "robin-vault-recover": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "recover": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@robin/converter": "*",
+    "diff": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  }
+}

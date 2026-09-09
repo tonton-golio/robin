@@ -1,6 +1,7 @@
-import crypto from 'crypto';
-import fs from 'fs/promises';
-import path from 'path';
+import crypto from "crypto";
+import fs from "fs/promises";
+import path from "path";
+import { appendJsonlObject } from "@robin/vault-io";
 import {
   annotationEventId,
   annotationEventTimestamp,
@@ -9,11 +10,11 @@ import {
   isClosedAnnotationStatus,
   type AnnotationEvent,
   type AnnotationRecord,
-} from '@/lib/annotations';
-import { locateVault } from '@/lib/vault';
-import { OWNER_NAME } from '@/lib/config';
+} from "@/lib/annotations";
+import { locateVault } from "@/lib/vault";
+import { OWNER_NAME } from "@/lib/config";
 
-const ANNOTATION_DIR = path.join('inbox', 'robin', 'annotations');
+const ANNOTATION_DIR = path.join("inbox", "robin", "annotations");
 
 export interface AnnotationListOptions {
   pagePath?: string;
@@ -36,28 +37,29 @@ export function annotationLogDir(): string {
 export async function hashAnnotationPage(vault: string, renderPath: string): Promise<string> {
   try {
     const data = await fs.readFile(path.join(vault, renderPath));
-    return `sha256:${crypto.createHash('sha256').update(data).digest('hex')}`;
-  } catch {
-    return 'sha256:missing';
+    return `sha256:${crypto.createHash("sha256").update(data).digest("hex")}`;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "sha256:missing";
+    throw error;
   }
 }
 
-export async function appendAnnotationEvent(event: AnnotationEvent, now = new Date()): Promise<string> {
+export async function appendAnnotationEvent(
+  event: AnnotationEvent,
+  now = new Date(),
+): Promise<string> {
   const vault = locateVault();
   const timestamp = event.updated_at ?? event.created_at ?? event.resolved_at ?? now.toISOString();
   const month = timestamp.slice(0, 7);
   const relPath = path.join(ANNOTATION_DIR, `${month}.jsonl`);
-  const absPath = path.join(vault, relPath);
-
-  await fs.mkdir(path.dirname(absPath), { recursive: true });
-  await fs.appendFile(absPath, `${JSON.stringify(event)}\n`, 'utf-8');
+  await appendJsonlObject(vault, relPath.split(path.sep).join("/"), event);
 
   return relPath;
 }
 
 function eventNameForStatus(status: string): string {
-  if (status === 'needs-attention') return 'annotation.needs-attention';
-  if (status === 'open') return 'annotation.reopened';
+  if (status === "needs-attention") return "annotation.needs-attention";
+  if (status === "open") return "annotation.reopened";
   return `annotation.${status}`;
 }
 
@@ -69,38 +71,47 @@ export async function appendAnnotationStatusEvent(update: AnnotationStatusUpdate
     status: update.status,
     created_at: updatedAt,
     updated_at: updatedAt,
-    author: update.author ?? (OWNER_NAME || 'user'),
+    author: update.author ?? (OWNER_NAME || "user"),
     page_path: update.pagePath,
     render_path: update.renderPath,
     resolution_md: update.resolutionMd,
   };
 
-  if (update.status !== 'open') {
+  if (update.status !== "open") {
     event.resolved_at = updatedAt;
   }
 
   return appendAnnotationEvent(event, new Date(updatedAt));
 }
 
-export async function readAnnotationEvents(): Promise<Array<AnnotationEvent & { logPath: string }>> {
+export async function readAnnotationEvents(): Promise<
+  Array<AnnotationEvent & { logPath: string }>
+> {
   const vault = locateVault();
   const dir = path.join(vault, ANNOTATION_DIR);
-  let entries: import('fs').Dirent[];
+  let entries: import("fs").Dirent[];
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
 
   const files = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
-    .map((entry) => ({ relPath: path.join(ANNOTATION_DIR, entry.name), absPath: path.join(dir, entry.name) }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+    .map((entry) => ({
+      relPath: path.join(ANNOTATION_DIR, entry.name),
+      absPath: path.join(dir, entry.name),
+    }))
     .sort((a, b) => a.relPath.localeCompare(b.relPath));
 
   const events: Array<AnnotationEvent & { logPath: string }> = [];
   for (const file of files) {
-    const content = await fs.readFile(file.absPath, 'utf-8').catch(() => '');
-    for (const line of content.split('\n')) {
+    const content = await fs.readFile(file.absPath, "utf-8").catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+      throw error;
+    });
+    for (const line of content.split("\n")) {
       if (!line.trim()) continue;
       try {
         events.push({ ...(JSON.parse(line) as AnnotationEvent), logPath: file.relPath });
@@ -159,7 +170,9 @@ async function flagStaleAnchors(
   );
 }
 
-export async function listAnnotations(options: AnnotationListOptions = {}): Promise<AnnotationRecord[]> {
+export async function listAnnotations(
+  options: AnnotationListOptions = {},
+): Promise<AnnotationRecord[]> {
   const vault = locateVault();
   const events = await readAnnotationEvents();
   const collapsed = collapseAnnotationEvents(events)
@@ -173,4 +186,3 @@ export async function listAnnotations(options: AnnotationListOptions = {}): Prom
 
   return flagStaleAnchors(vault, filtered);
 }
-

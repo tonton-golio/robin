@@ -1,43 +1,52 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Highlighter, MessageSquare, ArrowUpRight, Sparkles } from 'lucide-react';
+import { Highlighter, MessageSquare } from 'lucide-react';
 import {
   DEFAULT_ANNOTATION_COLOR,
+  isClosedAnnotationStatus,
   type AnnotationAnchor,
   type AnnotationRecord,
 } from '@/lib/annotations';
-import { Button } from '@/components/ui';
-import { cn } from '@/lib/utils';
+
+/**
+ * Annotations as a conversation.
+ *
+ * Mounted once by the shell for every rendered vault page. Three surfaces:
+ *   1. a selection toolbar (highlight / comment) — an Human write, ink-styled;
+ *   2. a real role="dialog" popover that opens on a highlight and holds the
+ *      thread (comment + replies, each with actor + timestamp; Robin replies
+ *      marked ▪), a reply box (⌘↵ posts), and the Resolve / Needs attention /
+ *      Reject state group — repositioned against the live anchor rect on scroll,
+ *      flipped above when it would overflow the viewport bottom;
+ *   3. an unanchored-notes tray listing annotations whose anchor no longer
+ *      resolves against the current text (Robin rewrote the paragraph), so a
+ *      note is never silently lost.
+ *
+ * Everything is append-only (brain/memory/annotations.jsonl): a reply is a new
+ * comment on the same anchor; a state change PATCHes the thread's id. Readers
+ * dedupe by id and render the latest state.
+ */
 
 type Anchor = AnnotationAnchor;
 
 function pagePathFromRoute(pathname: string): string | null {
-  // Annotator is only meaningful on rendered vault pages
-  // (brain/, logs/, out/). Old /p/<path> URLs are now legacy redirects, so
-  // by the time the annotator runs the URL is the clean canonical form.
   const isVaultPage =
-    pathname.startsWith('/brain/') ||
-    pathname.startsWith('/logs/') ||
-    pathname.startsWith('/out/');
+    pathname.startsWith('/brain/') || pathname.startsWith('/logs/') || pathname.startsWith('/out/');
   if (!isVaultPage) return null;
   const rel = decodeURIComponent(pathname.slice(1));
-  if (!rel) return null;
-  // Logs route /_logs/... is the changelog/repo-log viewer, not an annotatable page.
-  if (rel.startsWith('_logs/')) return null;
+  if (!rel || rel.startsWith('_logs/')) return null;
   return rel.endsWith('.html') ? rel : `${rel}.html`;
 }
 
 function getContainer(): HTMLElement | null {
   return (
-    document.querySelector('[data-robin-annotate-root]') as HTMLElement | null
-  ) ?? (document.querySelector('.robin-prose') as HTMLElement | null);
+    (document.querySelector('[data-robin-annotate-root]') as HTMLElement | null) ??
+    (document.querySelector('.robin-prose') as HTMLElement | null)
+  );
 }
 
 function computeOffsets(root: HTMLElement, range: Range): { start: number; end: number } | null {
-  const fullText = root.textContent ?? '';
-  if (!fullText) return null;
-  // walk text nodes and accumulate offsets
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
   let acc = 0;
   let startOffset = -1;
@@ -45,9 +54,7 @@ function computeOffsets(root: HTMLElement, range: Range): { start: number; end: 
   let node = walker.nextNode();
   while (node) {
     const len = (node as Text).data.length;
-    if (node === range.startContainer && startOffset === -1) {
-      startOffset = acc + range.startOffset;
-    }
+    if (node === range.startContainer && startOffset === -1) startOffset = acc + range.startOffset;
     if (node === range.endContainer) {
       endOffset = acc + range.endOffset;
       break;
@@ -93,15 +100,15 @@ function rangeFromOffsets(root: HTMLElement, start: number, end: number): Range 
   return range;
 }
 
-function applyHighlightRange(range: Range, color: string | undefined, id: string): void {
+function applyHighlightRange(range: Range, ann: AnnotationRecord): void {
   const mark = document.createElement('mark');
   mark.className = 'robin-highlight';
-  mark.dataset.color = color ?? DEFAULT_ANNOTATION_COLOR;
-  mark.dataset.annId = id;
+  mark.dataset.color = ann.color ?? DEFAULT_ANNOTATION_COLOR;
+  mark.dataset.annId = ann.id;
+  mark.dataset.status = ann.status;
   try {
     range.surroundContents(mark);
   } catch {
-    // Fallback: wrap each text node fragment individually
     const fragment = range.cloneContents();
     mark.appendChild(fragment);
     range.deleteContents();
@@ -109,8 +116,9 @@ function applyHighlightRange(range: Range, color: string | undefined, id: string
   }
 }
 
-function reanchor(root: HTMLElement, anchor: Anchor): Range | null {
-  // Prefer text_quote with prefix/suffix
+/** Returns the range for an anchor, or null when it can no longer resolve. */
+function reanchor(root: HTMLElement, anchor: Anchor | undefined): Range | null {
+  if (!anchor) return null;
   const text = root.textContent ?? '';
   const { exact, prefix, suffix } = anchor.text_quote;
   if (exact) {
@@ -118,37 +126,45 @@ function reanchor(root: HTMLElement, anchor: Anchor): Range | null {
     const idx = text.indexOf(needle);
     if (idx !== -1) {
       const start = idx + prefix.length;
-      const end = start + exact.length;
-      const r = rangeFromOffsets(root, start, end);
-      if (r) return r;
+      return rangeFromOffsets(root, start, start + exact.length);
     }
     const idx2 = text.indexOf(exact);
-    if (idx2 !== -1) {
-      return rangeFromOffsets(root, idx2, idx2 + exact.length);
-    }
+    if (idx2 !== -1) return rangeFromOffsets(root, idx2, idx2 + exact.length);
   }
-  if (anchor.text_position) {
-    return rangeFromOffsets(root, anchor.text_position.start, anchor.text_position.end);
-  }
+  if (anchor.text_position) return rangeFromOffsets(root, anchor.text_position.start, anchor.text_position.end);
   return null;
+}
+
+function relTime(iso?: string): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+function isRobin(author?: string): boolean {
+  return !!author && /robin/i.test(author);
 }
 
 export function Annotator({ pathname }: { pathname: string }) {
   const pagePath = useMemo(() => pagePathFromRoute(pathname), [pathname]);
   const containerRef = useRef<HTMLElement | null>(null);
-  const [selection, setSelection] = useState<{
-    rect: DOMRect;
-    anchor: Anchor;
-  } | null>(null);
-  const [editor, setEditor] = useState<{ anchor: Anchor; rect: DOMRect } | null>(null);
-  const [comment, setComment] = useState('');
   const [annotations, setAnnotations] = useState<AnnotationRecord[]>([]);
-  // Toast carries a kind so failed saves render the error (rust) border
-  // instead of looking identical to a success confirmation.
-  const [toast, setToast] = useState<{ message: string; kind: 'success' | 'error' } | null>(null);
-  // In-flight guard: a double-click would otherwise POST twice and create
-  // two distinct annotation events for the same selection.
+  const [unanchored, setUnanchored] = useState<AnnotationRecord[]>([]);
+  const [selection, setSelection] = useState<{ rect: DOMRect; anchor: Anchor } | null>(null);
+  const [composing, setComposing] = useState<{ rect: DOMRect; anchor: Anchor } | null>(null);
+  const [dialog, setDialog] = useState<{ annId: string } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
+  const [comment, setComment] = useState('');
+  const [reply, setReply] = useState('');
   const [saving, setSaving] = useState(false);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
+  const anchorElRef = useRef<HTMLElement | null>(null);
 
   const refresh = useCallback(async () => {
     if (!pagePath) return;
@@ -158,11 +174,10 @@ export function Annotator({ pathname }: { pathname: string }) {
       const data = await res.json();
       setAnnotations(Array.isArray(data.annotations) ? data.annotations : []);
     } catch {
-      // ignore
+      /* ignore */
     }
   }, [pagePath]);
 
-  // Locate container after mount
   useEffect(() => {
     if (!pagePath) return;
     let attempts = 0;
@@ -179,11 +194,10 @@ export function Annotator({ pathname }: { pathname: string }) {
     find();
   }, [pagePath, refresh]);
 
-  // Apply highlights once annotations + container ready
+  // Apply highlights; collect ones whose anchor no longer resolves.
   useEffect(() => {
     const root = containerRef.current;
     if (!root) return;
-    // Clear previous highlights
     root.querySelectorAll('mark.robin-highlight').forEach((m) => {
       const parent = m.parentNode;
       if (!parent) return;
@@ -191,17 +205,16 @@ export function Annotator({ pathname }: { pathname: string }) {
       parent.removeChild(m);
     });
     root.normalize();
-    if (annotations.length === 0) return;
+    const orphans: AnnotationRecord[] = [];
     for (const ann of annotations) {
-      if (!ann.anchor) continue;
       const range = reanchor(root, ann.anchor);
-      if (range && !range.collapsed) {
-        applyHighlightRange(range, ann.color, ann.id);
-      }
+      if (range && !range.collapsed) applyHighlightRange(range, ann);
+      else if (ann.anchor) orphans.push(ann);
     }
+    setUnanchored(orphans);
   }, [annotations]);
 
-  // Listen for selection
+  // Selection → toolbar.
   useEffect(() => {
     if (!pagePath) return;
     function handler() {
@@ -218,8 +231,6 @@ export function Annotator({ pathname }: { pathname: string }) {
         return;
       }
       const rect = range.getBoundingClientRect();
-      // Clear any visible toolbar when the selection shrinks below threshold
-      // mid-drag, otherwise it floats with a stale (now-invalid) anchor.
       if (rect.width < 1) {
         setSelection(null);
         return;
@@ -237,14 +248,7 @@ export function Annotator({ pathname }: { pathname: string }) {
       const fullText = root.textContent ?? '';
       const prefix = fullText.slice(Math.max(0, offsets.start - 32), offsets.start);
       const suffix = fullText.slice(offsets.end, offsets.end + 32);
-      setSelection({
-        rect,
-        anchor: {
-          block_path: [],
-          text_quote: { exact, prefix, suffix },
-          text_position: offsets,
-        },
-      });
+      setSelection({ rect, anchor: { block_path: [], text_quote: { exact, prefix, suffix }, text_position: offsets } });
     }
     document.addEventListener('mouseup', handler);
     document.addEventListener('selectionchange', handler);
@@ -254,36 +258,96 @@ export function Annotator({ pathname }: { pathname: string }) {
     };
   }, [pagePath]);
 
-  async function save(kind: 'highlight' | 'comment', commentMd: string, anchor: Anchor) {
-    if (!pagePath || !anchor) return;
-    // Guard against double-submit (double-click / impatient click on a slow fs)
-    // which would append two distinct annotation events for one selection.
-    if (saving) return;
-    setSaving(true);
-    const body = {
-      page_path: pagePath,
-      render_path: pagePath,
-      kind,
-      comment_md: commentMd,
-      anchor,
+  // Click a highlight → open the conversation dialog anchored to it.
+  useEffect(() => {
+    if (!pagePath) return;
+    function onClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      const mark = target?.closest<HTMLElement>('mark.robin-highlight');
+      if (!mark) return;
+      const annId = mark.dataset.annId;
+      if (!annId) return;
+      anchorElRef.current = mark;
+      setSelection(null);
+      setDialog({ annId });
+    }
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, [pagePath]);
+
+  // Reposition the dialog against the live anchor rect (scroll / resize) with an
+  // edge-flip above when it would overflow the viewport bottom.
+  useEffect(() => {
+    if (!dialog) {
+      setPos(null);
+      return;
+    }
+    function place() {
+      const el = anchorElRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const dialogH = 300;
+      const below = r.bottom + dialogH < window.innerHeight;
+      const top = below ? r.bottom + 8 : Math.max(8, r.top - dialogH - 8);
+      const left = Math.min(Math.max(8, r.left), window.innerWidth - 372);
+      setPos({ top, left, above: !below });
+    }
+    place();
+    replyRef.current?.focus();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
     };
+  }, [dialog]);
+
+  // Esc closes whatever is open; focus returns to the anchor.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (dialog) {
+        setDialog(null);
+        anchorElRef.current?.focus?.();
+      }
+      setComposing(null);
+      setComment('');
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [dialog]);
+
+  async function post(kind: 'highlight' | 'comment', commentMd: string, anchor: Anchor): Promise<boolean> {
+    if (!pagePath || saving) return false;
+    setSaving(true);
     try {
       const res = await fetch('/api/annotations', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ page_path: pagePath, render_path: pagePath, kind, comment_md: commentMd, anchor }),
       });
       if (!res.ok) throw new Error('save failed');
-      setSelection(null);
-      setEditor(null);
-      setComment('');
       window.getSelection()?.removeAllRanges();
-      setToast({ message: kind === 'highlight' ? 'Highlighted' : 'Comment saved', kind: 'success' });
-      setTimeout(() => setToast(null), 1800);
-      refresh();
-    } catch (err) {
-      setToast({ message: `Save failed: ${(err as Error).message}`, kind: 'error' });
-      setTimeout(() => setToast(null), 2400);
+      await refresh();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function setStatus(id: string, status: string): Promise<void> {
+    if (!pagePath) return;
+    setSaving(true);
+    try {
+      await fetch('/api/annotations', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, status, page_path: pagePath, render_path: pagePath, resolution_md: `Marked ${status}.` }),
+      });
+      await refresh();
+      setDialog(null);
     } finally {
       setSaving(false);
     }
@@ -291,142 +355,230 @@ export function Annotator({ pathname }: { pathname: string }) {
 
   if (!pagePath) return null;
 
+  // The thread for the open dialog = annotations sharing the anchor exact.
+  const rootAnn = dialog ? annotations.find((a) => a.id === dialog.annId) ?? null : null;
+  const thread = rootAnn
+    ? annotations
+        .filter((a) => a.anchor?.text_quote.exact === rootAnn.anchor?.text_quote.exact)
+        .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+    : [];
+
   return (
     <>
-      {selection && !editor && (
+      {/* selection toolbar */}
+      {selection && !composing && !dialog && (
         <div
           role="toolbar"
           aria-label="Annotate selection"
-          className="absolute z-50 flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-lg"
-          onMouseDown={(event) => event.preventDefault()}
+          className="r-anno-toolbar"
+          onMouseDown={(e) => e.preventDefault()}
           style={{
-            top: Math.max(window.scrollY + selection.rect.top - 44, 60),
-            left: Math.min(
-              window.scrollX + selection.rect.left + selection.rect.width / 2 - 110,
-              window.innerWidth - 240,
-            ),
+            top: Math.max(window.scrollY + selection.rect.top - 42, 56),
+            left: Math.min(window.scrollX + selection.rect.left, window.innerWidth - 220),
           }}
         >
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
+            className="r-anno-tool-btn"
             disabled={saving}
-            onClick={() => save('highlight', '', selection.anchor)}
-            title="Highlight selection"
+            onClick={() => post('highlight', '', selection.anchor)}
           >
-            <Highlighter size={14} strokeWidth={1.5} /> highlight
-          </Button>
-          <div className="h-[18px] w-px bg-border" />
-          <Button
+            <Highlighter size={13} strokeWidth={1.6} /> highlight
+          </button>
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
+            className="r-anno-tool-btn"
             disabled={saving}
-            onClick={() => setEditor({ anchor: selection.anchor, rect: selection.rect })}
-            title="Add comment"
+            onClick={() => setComposing({ rect: selection.rect, anchor: selection.anchor })}
           >
-            <MessageSquare size={14} strokeWidth={1.5} /> comment
-          </Button>
+            <MessageSquare size={13} strokeWidth={1.6} /> comment
+          </button>
         </div>
       )}
 
-      {editor && (
+      {/* compose a new comment */}
+      {composing && (
         <div
           role="dialog"
           aria-label="Add a comment"
-          className="fixed z-[60] w-80 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
+          className="r-anno-dialog"
           style={{
-            // position: fixed resolves against the viewport, and editor.rect is
-            // already viewport-relative (getBoundingClientRect). Adding scrollX
-            // here (unlike the position:absolute toolbar above) would shove the
-            // dialog right by the horizontal scroll amount. Match the top calc,
-            // which correctly omits scrollY.
-            top: Math.max(editor.rect.bottom + 16, 80),
-            left: Math.min(editor.rect.left, window.innerWidth - 340),
+            top: Math.min(composing.rect.bottom + 8, window.innerHeight - 200),
+            left: Math.min(composing.rect.left, window.innerWidth - 372),
           }}
         >
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            // Keyboard support: Escape dismisses, Cmd/Ctrl+Enter saves —
-            // otherwise this capture flow is mouse-only.
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                setEditor(null);
-                setComment('');
-              } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                if (!saving) save('comment', comment, editor.anchor);
-              }
-            }}
-            placeholder="Add a comment…"
-            autoFocus
-            className={cn(
-              'min-h-[118px] w-full resize-y rounded-md border border-border bg-background',
-              'px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none',
-              'placeholder:text-muted-foreground focus:border-ring focus:ring-[3px] focus:ring-ring/30',
-            )}
-          />
-          <div className="mt-2 flex justify-end gap-2">
-            <Button
+          <div className="ahead">
+            <span className="r-bar">Comment</span>
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              disabled={saving}
+              className="aclose"
+              aria-label="Close"
               onClick={() => {
-                setEditor(null);
+                setComposing(null);
                 setComment('');
               }}
             >
-              cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={saving}
-              onClick={() => save('comment', comment, editor.anchor)}
-            >
-              <Sparkles size={12} strokeWidth={1.5} /> save
-            </Button>
+              ✕
+            </button>
+          </div>
+          <div className="r-anno-foot">
+            <textarea
+              autoFocus
+              value={comment}
+              placeholder="Add a comment…"
+              onChange={(e) => setComment(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void post('comment', comment, composing.anchor).then((ok) => {
+                    if (ok) {
+                      setComposing(null);
+                      setComment('');
+                    }
+                  });
+                }
+              }}
+            />
+            <div className="r-anno-actions">
+              <button
+                type="button"
+                className="r-anno-state"
+                disabled={saving || !comment.trim()}
+                onClick={() =>
+                  void post('comment', comment, composing.anchor).then((ok) => {
+                    if (ok) {
+                      setComposing(null);
+                      setComment('');
+                    }
+                  })
+                }
+              >
+                Post (⌘↵)
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {annotations.length > 0 && (
+      {/* conversation dialog on an existing highlight */}
+      {dialog && rootAnn && pos && (
         <div
-          style={{
-            position: 'fixed',
-            top: 70,
-            right: 16,
-            zIndex: 30,
-            background: 'var(--bg-1)',
-            border: '1px solid var(--border-0)',
-            borderRadius: 8,
-            padding: '6px 10px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            color: 'var(--text-1)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
+          role="dialog"
+          aria-label="Annotation thread"
+          className={`r-anno-dialog ${pos.above ? 'above' : 'below'}`}
+          style={{ top: pos.top, left: pos.left }}
         >
-          <Highlighter size={12} strokeWidth={1.5} /> {annotations.length}{' '}
-          {annotations.length === 1 ? 'note' : 'notes'}
+          <div className="ahead">
+            <span className="r-bar">Note</span>
+            <button
+              type="button"
+              className="aclose"
+              aria-label="Close"
+              onClick={() => {
+                setDialog(null);
+                anchorElRef.current?.focus?.();
+              }}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="r-anno-body">
+            {rootAnn.anchor?.text_quote.exact ? (
+              <div className="quote">“{rootAnn.anchor.text_quote.exact}”</div>
+            ) : null}
+            {thread.map((a) => (
+              <div className="r-anno-reply" key={a.id}>
+                <div className="who">
+                  <span className="actor">
+                    {isRobin(a.author) ? '▪ ' : ''}
+                    {a.author ?? 'human'}
+                  </span>
+                  <span>{relTime(a.created_at)}</span>
+                  {isClosedAnnotationStatus(a.status) ? <span>· {a.status}</span> : null}
+                </div>
+                {a.comment_md ? <div className="txt">{a.comment_md}</div> : <div className="txt">(highlight)</div>}
+              </div>
+            ))}
+          </div>
+          <div className="r-anno-foot">
+            <textarea
+              ref={replyRef}
+              value={reply}
+              placeholder="Reply…"
+              onChange={(e) => setReply(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && rootAnn.anchor) {
+                  e.preventDefault();
+                  void post('comment', reply, rootAnn.anchor).then((ok) => {
+                    if (ok) setReply('');
+                  });
+                }
+              }}
+            />
+            <div className="r-anno-actions">
+              <button
+                type="button"
+                className="r-anno-state"
+                disabled={saving}
+                onClick={() => void setStatus(rootAnn.id, 'resolved')}
+              >
+                Resolve
+              </button>
+              <button
+                type="button"
+                className="r-anno-state"
+                disabled={saving}
+                onClick={() => void setStatus(rootAnn.id, 'needs-attention')}
+              >
+                Needs attention
+              </button>
+              <button
+                type="button"
+                className="r-anno-state reject"
+                disabled={saving}
+                onClick={() => void setStatus(rootAnn.id, 'rejected')}
+              >
+                Reject
+              </button>
+            </div>
+            <div className="m">append-only · a reply or state change appends a same-id event; nothing is deleted.</div>
+          </div>
         </div>
       )}
 
-      {toast && (
-        <div
-          className="robin-toast"
-          data-kind={toast.kind}
-          role={toast.kind === 'error' ? 'alert' : 'status'}
-          aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}
-        >
-          <ArrowUpRight size={14} strokeWidth={1.5} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-          {toast.message}
+      {/* unanchored-notes tray */}
+      {unanchored.length > 0 && !dialog && (
+        <div className="r-anno-tray" role="complementary" aria-label="Unanchored notes">
+          <div className="r-anno-tray-head">
+            <Highlighter size={12} strokeWidth={1.6} />
+            {unanchored.length} unanchored {unanchored.length === 1 ? 'note' : 'notes'}
+          </div>
+          <div className="r-anno-tray-body">
+            {unanchored.map((a) => (
+              <div className="r-anno-tray-item" key={a.id}>
+                {a.anchor?.text_quote.exact ? <div className="q">“{a.anchor.text_quote.exact}”</div> : null}
+                {a.comment_md ? <div>{a.comment_md}</div> : null}
+                <div className="r-anno-actions">
+                  <button
+                    type="button"
+                    className="r-anno-state"
+                    disabled={saving}
+                    onClick={() => void setStatus(a.id, 'resolved')}
+                  >
+                    Resolve
+                  </button>
+                  <button
+                    type="button"
+                    className="r-anno-state reject"
+                    disabled={saving}
+                    onClick={() => void setStatus(a.id, 'rejected')}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </>

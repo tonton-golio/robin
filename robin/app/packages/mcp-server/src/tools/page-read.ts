@@ -2,30 +2,28 @@
  * page.read — Read a Robin page by slug or path.
  */
 
-import { z } from 'zod/v4';
-import { resolveRef } from '../resolve.js';
-import { readPage, extractMeta } from '../html-utils.js';
-import type { ToolContext, PageReadOutput, LinkEntry } from '../types.js';
+import { z } from "zod/v4";
+import { hashHtml } from "@robin/vault-io";
+import { resolveRef } from "../resolve.js";
+import { readPageWithRaw, extractMeta } from "../html-utils.js";
+import type { ToolContext, PageReadOutput, LinkEntry } from "../types.js";
 
 export const PageReadInputSchema = z.object({
-  ref: z.string().min(1).describe('Slug or vault-relative path (ending in .html)'),
+  ref: z.string().min(1).describe("Slug or vault-relative path (ending in .html)"),
 });
 
 export type PageReadInput = z.infer<typeof PageReadInputSchema>;
 
-export async function pageRead(
-  input: PageReadInput,
-  ctx: ToolContext
-): Promise<PageReadOutput> {
+export async function pageRead(input: PageReadInput, ctx: ToolContext): Promise<PageReadOutput> {
   const resolved = await resolveRef(input.ref, ctx);
-  const parsed = await readPage(resolved.absolutePath);
+  const { parsed, html } = await readPageWithRaw(resolved.absolutePath);
   const meta = extractMeta(parsed, resolved.vaultRelativePath);
 
   // Build links_out from wikilinkTargets
   const linksOut: LinkEntry[] = parsed.wikilinkTargets.map((slug) => ({
     slug,
-    path: '',
-    kind: 'wikilink',
+    path: "",
+    kind: "wikilink",
   }));
 
   // Build links_in from indexer if available
@@ -35,9 +33,7 @@ export async function pageRead(
       const db = ctx.indexer.db;
       // links carry from_path (the exact source page); use it directly rather
       // than resolving the non-unique from_slug through the wikilinks table.
-      const stmt = db.prepare(
-        'SELECT from_path, from_slug, kind FROM links WHERE to_slug = ?'
-      );
+      const stmt = db.prepare("SELECT from_path, from_slug, kind FROM links WHERE to_slug = ?");
       const rows = stmt.all(resolved.slug) as Array<{
         from_path: string;
         from_slug: string;
@@ -46,7 +42,7 @@ export async function pageRead(
       for (const row of rows) {
         linksIn.push({
           slug: row.from_slug,
-          path: row.from_path ?? '',
+          path: row.from_path ?? "",
           kind: row.kind,
         });
       }
@@ -58,6 +54,7 @@ export async function pageRead(
   return {
     path: resolved.vaultRelativePath,
     slug: resolved.slug,
+    content_hash: hashHtml(html),
     meta,
     frontmatter: parsed.frontmatter,
     blocks: parsed.blocks,

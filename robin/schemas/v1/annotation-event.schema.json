@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robin.local/schemas/v1/annotation-event.schema.json",
+  "title": "Robin annotation event",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/created"
+    },
+    {
+      "$ref": "#/$defs/status"
+    }
+  ],
+  "$defs": {
+    "identity": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "annotation_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "annotation_id"
+          ]
+        }
+      ]
+    },
+    "created": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "type": "object",
+          "required": [
+            "event",
+            "created_at",
+            "author",
+            "render_path",
+            "page_hash",
+            "kind",
+            "comment_md",
+            "anchor"
+          ],
+          "properties": {
+            "event": {
+              "const": "annotation.created"
+            },
+            "schema_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "annotation_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "const": "open"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "page_path": {
+              "type": "string"
+            },
+            "render_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "page_hash": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "enum": [
+                "comment",
+                "highlight"
+              ]
+            },
+            "comment_md": {
+              "type": "string"
+            },
+            "anchor": {
+              "type": "object"
+            },
+            "pin": {
+              "type": "object"
+            },
+            "learn": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "status": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "type": "object",
+          "required": [
+            "event"
+          ],
+          "properties": {
+            "event": {
+              "enum": [
+                "annotation.accepted",
+                "annotation.archived",
+                "annotation.closed",
+                "annotation.deleted",
+                "annotation.needs-attention",
+                "annotation.rejected",
+                "annotation.reopened",
+                "annotation.resolved"
+              ]
+            },
+            "schema_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "annotation_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "enum": [
+                "accepted",
+                "archived",
+                "closed",
+                "deleted",
+                "needs-attention",
+                "open",
+                "rejected",
+                "resolved"
+              ]
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "updated_at": {
+              "type": "string"
+            },
+            "resolved_at": {
+              "type": "string"
+            },
+            "resolution": {
+              "type": "string"
+            },
+            "resolution_md": {
+              "type": "string"
+            },
+            "result_link": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    }
+  }
+}

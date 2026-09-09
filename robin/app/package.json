@@ -2,7 +2,7 @@
   "name": "robin",
   "version": "0.0.0",
   "private": true,
-  "description": "Your local second brain — plain files the agent actually uses.",
+  "description": "Your local second brain \u2014 plain files the agent actually uses.",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -10,18 +10,24 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm --prefix tests test",
+    "test:e2e:loop": "npm --prefix tests run test:loop",
     "test:converter": "npm run test --workspace=@robin/converter",
+    "test:migration": "node --test ../scripts/tests/migrate-page.integration.test.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "schemas:check": "node ../scripts/check-json-schemas.mjs",
     "convert": "node packages/converter/dist/cli.js",
     "lint": "biome lint . --diagnostic-level=error --skip=a11y --skip=suspicious --skip=security --skip=correctness/useExhaustiveDependencies --skip=correctness/noPrecisionLoss",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "prepare": "lefthook install || echo 'lefthook not installed (run: npm i lefthook -D && npx lefthook install)'",
-    "hooks:install": "npx lefthook install"
+    "prepare": "node ../scripts/install-hooks.mjs",
+    "hooks:install": "node ../scripts/install-hooks.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@types/node": "^24.0.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "lefthook": "^1.11.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.7"

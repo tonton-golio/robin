@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import type Database from 'better-sqlite3';
 import { indexFile, recomputeWikilink } from './index-file.js';
+import { INDEXED_PAGE_ROOTS } from './types.js';
 
 /** Glob .html files under a directory recursively */
 function findHtmlFiles(dir: string): string[] {
@@ -50,10 +51,9 @@ export async function scan(
   verbose = false,
   concurrency = 8
 ): Promise<ScanResult> {
-  const allFiles: string[] = [
-    ...findHtmlFiles(path.join(vaultPath, 'brain')),
-    ...findHtmlFiles(path.join(vaultPath, 'out')),
-  ];
+  const allFiles: string[] = INDEXED_PAGE_ROOTS.flatMap((root) =>
+    findHtmlFiles(path.join(vaultPath, root)),
+  );
 
   if (verbose) {
     console.log(`[scan] found ${allFiles.length} HTML files`);
@@ -82,7 +82,7 @@ export async function scan(
     );
   }
 
-  // Prune phantom rows: scan() owns brain/ and out/, so any pages row under
+  // Prune phantom rows: scan() owns brain/, logs/meetings/, logs/reports/, and out/, so any pages row under
   // those roots not seen in this scan is for a file that was moved or deleted.
   // indexFile() only upserts; without this prune the stale row lingers forever,
   // inflating ambiguous-slug counts and mis-resolving wikilinks (e.g. a
@@ -97,7 +97,7 @@ export async function scan(
 
 /**
  * Delete DB rows for files that no longer exist on disk under the scan's owned
- * roots (brain/, out/). Mirrors the watcher's unlink cleanup: drop the page row
+ * roots (brain/, logs/meetings/, logs/reports/, out/). Mirrors the watcher's unlink cleanup: drop the page row
  * (FTS cascades via triggers) and its vector, then for any slug left with no
  * surviving page drop its outbound links, and recompute the resolver row so the
  * slug de-ambiguates (or clears) based on whatever pages remain.
@@ -111,7 +111,9 @@ function pruneMissing(
     allFiles.map((f) => path.relative(vaultPath, f).replace(/\\/g, '/'))
   );
   const owned = db
-    .prepare("SELECT rowid, path, slug FROM pages WHERE path LIKE 'brain/%' OR path LIKE 'out/%'")
+    .prepare(
+      "SELECT rowid, path, slug FROM pages WHERE path LIKE 'brain/%' OR path LIKE 'logs/meetings/%' OR path LIKE 'logs/reports/%' OR path LIKE 'out/%'",
+    )
     .all() as Array<{ rowid: number; path: string; slug: string }>;
 
   const affectedSlugs = new Set<string>();

@@ -11,29 +11,31 @@
  * this directory. Do not assume it runs in production today.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import { vaultPath } from '@/lib/vault';
+import { NextRequest, NextResponse } from "next/server";
+import fs from "fs/promises";
+import crypto from "node:crypto";
+import os from "os";
+import path from "path";
+import { durableCopyNew, durableWriteNew } from "@robin/vault-io";
+import { vaultPath } from "@/lib/vault";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function meetingRecorderHome(): string {
-  return process.env['MEETING_RECORDER_HOME'] ?? path.join(os.homedir(), '.meeting-recorder');
+  return process.env["MEETING_RECORDER_HOME"] ?? path.join(os.homedir(), ".meeting-recorder");
 }
 
 function recordingsDir(): string {
-  return path.join(meetingRecorderHome(), 'recordings');
+  return path.join(meetingRecorderHome(), "recordings");
 }
 
 function slugifyFilename(name: string): string {
   return name
     .toLowerCase()
-    .replace(/\.md$/i, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/\.md$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
     .slice(0, 96);
 }
 
@@ -43,15 +45,15 @@ function slugifyFilename(name: string): string {
  */
 function parseNativeFrontmatter(markdown: string): Record<string, string> {
   const result: Record<string, string> = {};
-  if (!markdown.startsWith('---')) return result;
-  const end = markdown.indexOf('\n---', 4);
+  if (!markdown.startsWith("---")) return result;
+  const end = markdown.indexOf("\n---", 4);
   if (end === -1) return result;
   const fm = markdown.slice(4, end);
-  for (const line of fm.split('\n')) {
+  for (const line of fm.split("\n")) {
     const m = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
     if (!m) continue;
-    const key = (m[1] ?? '').trim();
-    let val = (m[2] ?? '').trim();
+    const key = (m[1] ?? "").trim();
+    let val = (m[2] ?? "").trim();
     // Strip surrounding quotes if present
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
@@ -63,14 +65,14 @@ function parseNativeFrontmatter(markdown: string): Record<string, string> {
 }
 
 async function listNativeCandidates(limit = 20): Promise<any[]> {
-  const meetingsRoot = path.resolve(meetingRecorderHome(), 'meetings');
+  const meetingsRoot = path.resolve(meetingRecorderHome(), "meetings");
   const recRoot = recordingsDir();
   let files: string[] = [];
   try {
     const dirents = await fs.readdir(meetingsRoot, { withFileTypes: true });
     files = dirents
-      .filter(d => d.isFile() && d.name.endsWith('.md'))
-      .map(d => path.join(meetingsRoot, d.name));
+      .filter((d) => d.isFile() && d.name.endsWith(".md"))
+      .map((d) => path.join(meetingsRoot, d.name));
   } catch {
     return [];
   }
@@ -84,17 +86,21 @@ async function listNativeCandidates(limit = 20): Promise<any[]> {
       } catch {
         return { p, mtime: 0 };
       }
-    })
+    }),
   );
   withStats.sort((a, b) => b.mtime - a.mtime);
 
   const candidates: any[] = [];
   for (const { p } of withStats.slice(0, limit)) {
-    let content = '';
-    try { content = await fs.readFile(p, 'utf-8'); } catch { continue; }
+    let content = "";
+    try {
+      content = await fs.readFile(p, "utf-8");
+    } catch {
+      continue;
+    }
     const fm = parseNativeFrontmatter(content);
     const base = path.basename(p);
-    const audioRef = fm['audio_file'] || '';
+    const audioRef = fm["audio_file"] || "";
     let hasAudio = false;
     let audioSize = 0;
     if (audioRef) {
@@ -108,10 +114,10 @@ async function listNativeCandidates(limit = 20): Promise<any[]> {
     candidates.push({
       path: p,
       filename: base,
-      title: fm['title'] || base.replace(/\.md$/, ''),
-      date: fm['date'] || '',
-      duration: fm['duration'] || '',
-      speakers: fm['speakers'] || '',
+      title: fm["title"] || base.replace(/\.md$/, ""),
+      date: fm["date"] || "",
+      duration: fm["duration"] || "",
+      speakers: fm["speakers"] || "",
       audio_file: audioRef,
       hasAudio,
       audioSize,
@@ -121,54 +127,114 @@ async function listNativeCandidates(limit = 20): Promise<any[]> {
 }
 
 async function importNativeRecording(sourceMdPath: string): Promise<any> {
-  const sourceRoot = path.resolve(meetingRecorderHome(), 'meetings');
+  const sourceRoot = path.resolve(meetingRecorderHome(), "meetings");
   const recRoot = recordingsDir();
   const absSource = path.resolve(sourceMdPath);
 
   if (absSource !== sourceRoot && !absSource.startsWith(sourceRoot + path.sep)) {
-    throw new Error('Path must be inside Meeting Recorder meetings directory');
+    throw new Error("Path must be inside Meeting Recorder meetings directory");
   }
-  if (path.extname(absSource) !== '.md') {
-    throw new Error('Only markdown meeting exports can be imported');
+  if (path.extname(absSource) !== ".md") {
+    throw new Error("Only markdown meeting exports can be imported");
+  }
+
+  let sourceStat: Awaited<ReturnType<typeof fs.lstat>>;
+  try {
+    sourceStat = await fs.lstat(absSource);
+  } catch {
+    throw new Error("Meeting export not found");
+  }
+  if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) {
+    throw new Error("Meeting export must be a regular, non-symlink file");
+  }
+  const [realSourceRoot, realSource] = await Promise.all([
+    fs.realpath(sourceRoot),
+    fs.realpath(absSource),
+  ]);
+  if (realSource !== realSourceRoot && !realSource.startsWith(realSourceRoot + path.sep)) {
+    throw new Error("Meeting export resolves outside the configured meetings directory");
   }
 
   let markdown: string;
   try {
-    markdown = await fs.readFile(absSource, 'utf-8');
+    markdown = await fs.readFile(realSource, "utf-8");
   } catch {
-    throw new Error('Meeting export not found');
+    throw new Error("Meeting export not found");
   }
 
   const fm = parseNativeFrontmatter(markdown);
-  const audioRef = (fm['audio_file'] || '').trim();
+  const audioRef = (fm["audio_file"] || "").trim();
 
-  // Copy the markdown
-  const base = slugifyFilename(path.basename(absSource)) || 'native-meeting';
-  const filename = `${base}.md`;
+  // Validate every external reference before publishing any vault object.
+  if (
+    audioRef &&
+    (audioRef.includes("/") ||
+      audioRef.includes("\\") ||
+      audioRef.includes("..") ||
+      audioRef.includes("\0"))
+  ) {
+    throw new Error("audio_file must be a bare filename");
+  }
+
+  let audioSource: string | null = null;
+  let audioWarning: string | null = null;
+  if (audioRef) {
+    const candidate = path.join(recRoot, audioRef);
+    try {
+      const stat = await fs.lstat(candidate);
+      if (stat.isSymbolicLink() || !stat.isFile()) {
+        throw new Error("referenced audio must be a regular, non-symlink file");
+      }
+      const [realRecordingsRoot, realAudio] = await Promise.all([
+        fs.realpath(recRoot),
+        fs.realpath(candidate),
+      ]);
+      if (
+        realAudio !== realRecordingsRoot &&
+        !realAudio.startsWith(realRecordingsRoot + path.sep)
+      ) {
+        throw new Error("referenced audio resolves outside the recordings directory");
+      }
+      audioSource = realAudio;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        audioWarning = `Referenced audio was not found: ${audioRef}`;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  // Every import is an immutable capture. A random suffix prevents two exports
+  // with the same normalized title from sharing or overwriting a destination.
+  const base = slugifyFilename(path.basename(absSource)) || "native-meeting";
+  const captureId = crypto.randomUUID().slice(0, 8);
+  const filename = `${base}-${captureId}.md`;
   const relMdPath = `inbox/meetings/${filename}`;
   const destMd = vaultPath(relMdPath);
-  await fs.mkdir(path.dirname(destMd), { recursive: true });
-  await fs.writeFile(destMd, markdown, 'utf-8');
+  await durableWriteNew(destMd, markdown);
 
   // Copy audio if referenced and present. `audioRef` comes from untrusted
   // frontmatter — it must be a bare filename, never a path. Reject anything
   // with directory separators or `..` so a crafted export can't read/write
   // outside the recordings dir / vault audio dir.
   let importedAudio: string | null = null;
-  if (audioRef && (audioRef.includes('/') || audioRef.includes('\\') || audioRef.includes('..') || audioRef.includes('\0'))) {
-    throw new Error('audio_file must be a bare filename');
-  }
-  if (audioRef) {
-    const srcAudio = path.join(recRoot, audioRef);
+  if (audioRef && audioSource) {
     try {
-      await fs.access(srcAudio);
-      const audioDir = vaultPath('inbox', 'meetings', 'audio');
-      await fs.mkdir(audioDir, { recursive: true });
-      const destAudio = path.join(audioDir, audioRef);
-      await fs.copyFile(srcAudio, destAudio);
-      importedAudio = path.join('inbox', 'meetings', 'audio', audioRef);
-    } catch {
-      // audio missing or inaccessible — non-fatal for the md import
+      const audioDir = vaultPath("inbox", "meetings", "audio");
+      const extension = path.extname(audioRef);
+      const audioBase = slugifyFilename(path.basename(audioRef, extension)) || "native-audio";
+      const audioFilename = `${audioBase}-${captureId}${extension.toLowerCase()}`;
+      const destAudio = path.join(audioDir, audioFilename);
+      await durableCopyNew(audioSource, destAudio);
+      importedAudio = path.join("inbox", "meetings", "audio", audioFilename);
+    } catch (error) {
+      // The immutable markdown capture has already committed. Surface partial
+      // success explicitly so a retry/operator can recover the audio; never
+      // pretend the capture was complete.
+      audioWarning = `Markdown imported to ${relMdPath}, but audio copy failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
     }
   }
 
@@ -180,18 +246,22 @@ async function importNativeRecording(sourceMdPath: string): Promise<any> {
     importedPath: relMdPath,
     importedAudioPath: importedAudio,
     hasAudio: !!importedAudio,
+    ...(audioWarning ? { warning: audioWarning } : {}),
     ingestUrl,
   };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
-  const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '20', 10)));
+  const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "20", 10)));
   try {
     const candidates = await listNativeCandidates(limit);
     return NextResponse.json({ candidates });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Failed to list native meetings', detail: String(err) }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to list native meetings", detail: String(err) },
+      { status: 500 },
+    );
   }
 }
 
@@ -200,19 +270,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = (await request.json()) as typeof body;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (typeof body.path !== 'string' || !body.path.trim()) {
-    return NextResponse.json({ error: '`path` is required' }, { status: 400 });
+  if (typeof body.path !== "string" || !body.path.trim()) {
+    return NextResponse.json({ error: "`path` is required" }, { status: 400 });
   }
 
   try {
     const result = await importNativeRecording(body.path as string);
     return NextResponse.json(result);
   } catch (err: any) {
-    const msg = err?.message || 'Import failed';
-    const status = msg.includes('not found') ? 404 : 400;
+    const msg = err?.message || "Import failed";
+    const status = msg.includes("not found") ? 404 : 400;
     return NextResponse.json({ error: msg }, { status });
   }
 }

@@ -1,0 +1,171 @@
+/* Robin shared primitives - "Quiet Slate" v2.
+   The vocabulary every page reuses: eyebrow bar, display block, status pill,
+   card, button, inline highlight, section label, mono meta, tone dot.
+   Separation is surface + soft elevation - a thing gets a border OR a shadow,
+   never both. The accent (--blue) shows up as a wash, a spine or a small fill,
+   never as a full-bleed colour field. --link is for body copy only.
+   Red is overdue/destructive only, and prefers --red-wash + --red text. */
+
+/* ---- base ---- */
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+a { color: var(--link); text-underline-offset: 2px; }
+
+/* ---- eyebrow bar: no fill any more. A quiet muted micro-label for section
+   labels, column headers, eyebrows. ---- */
+.r-bar {
+  display: inline-block;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 0;
+}
+
+/* ---- display block - the page hero. Sentence case, semibold, slightly
+   tightened. No per-line colour blocks: the accent belongs to the containing
+   block as `border-left: 3px solid var(--blue)`. ---- */
+.r-stepped {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.28;
+  margin: 0;
+}
+.r-stepped span {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+.r-stepped .in1 { margin-left: 1.2em; }
+.r-stepped .in2 { margin-left: 2.6em; }
+
+/* ---- inline highlight: search hits / key claims. Wash fill, text keeps its
+   colour - hits must not invert. ---- */
+.r-hl { background: var(--accent-wash); color: var(--ink); padding: 0 0.25em 0.05em;
+  border-radius: var(--radius-sm);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.r-hl-ink { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink);
+  padding: 0 0.25em 0.05em; border-radius: var(--radius-sm);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+
+/* ---- section label: micro-label + trailing hairline rule ---- */
+.r-section {
+  display: flex; align-items: center; gap: 12px;
+  font-size: var(--lab-size); font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track); text-transform: var(--lab-case);
+  color: var(--muted); margin: 0;
+}
+.r-section::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+
+/* ---- status pill: 999px, micro-label, hairline-weight outline. No solid
+   fills - active/overdue read as a wash plus coloured text. ---- */
+.r-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--lab-size); font-weight: 600;
+  letter-spacing: var(--lab-track); text-transform: var(--lab-case);
+  padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px;
+  white-space: nowrap; color: var(--muted); background: transparent;
+}
+.r-pill[data-status="active"], .r-pill.is-active {
+  /* label uses the DEEP accent: on the light 10% wash over --paper, --blue is
+     4.44:1 but --blue-deep is 5.61:1 (spec section 9). On dark, --blue-deep is
+     the lighter variant, so it gains contrast there too. */
+  background: var(--accent-wash); color: var(--blue-deep);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.r-pill[data-status="done"], .r-pill.is-done { background: transparent; color: var(--muted); }
+.r-pill[data-status="overdue"], .r-pill.is-overdue {
+  background: var(--red-wash); color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.r-pill[data-status="waiting"], .r-pill.is-waiting { background: transparent; color: var(--ink); }
+.r-pill[data-status="blocked"], .r-pill.is-blocked { background: transparent; color: var(--ink); border-style: dashed; }
+
+/* ---- card: level-2 surface. Elevation instead of an outline. ---- */
+.r-card {
+  background: var(--card); border: none; box-shadow: var(--offset);
+  border-radius: var(--radius);
+  padding: 16px; position: relative;
+}
+.r-card--flat { box-shadow: var(--offset-sm); }
+.r-card__reg { position: absolute; top: 8px; right: 10px; font-size: var(--lab-size); color: var(--muted); } /* (R) wink */
+
+/* ---- level-3 surface: popovers, command palette, dialogs, toasts ---- */
+.r-surface-2 {
+  background: var(--card-2); border: none; box-shadow: var(--offset-lg);
+  border-radius: var(--radius-lg);
+}
+
+/* ---- button: soft radius, sentence case, elevation lifts on hover and
+   collapses on press (no translate) ---- */
+.r-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 38px;
+  border: none; background: var(--card); color: var(--ink);
+  font: inherit; font-size: 14px; font-weight: 600; letter-spacing: 0;
+  border-radius: var(--radius);
+  padding: 9px 14px; cursor: pointer; box-shadow: var(--offset-sm);
+  transition: box-shadow 120ms ease, background-color 120ms ease;
+}
+.r-btn:hover { box-shadow: var(--offset); }
+.r-btn:active { box-shadow: none; }
+.r-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.r-btn--primary { background: var(--blue); color: var(--on-blue); }
+.r-btn--primary:hover { background: var(--blue-deep); }
+/* was an "ink brick"; the marked/selected state is now a wash + accent spine */
+.r-btn--ink {
+  background: var(--accent-wash); color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+.r-btn--ink:hover { background: color-mix(in srgb, var(--blue) 20%, transparent); box-shadow: inset 2px 0 0 var(--blue); }
+.r-btn--ghost { box-shadow: none; background: transparent; }
+.r-btn--ghost:hover { box-shadow: none; background: var(--card-2); }
+/* the one place a solid red fill is allowed */
+.r-btn--danger { background: var(--red); color: var(--on-red); }
+.r-btn:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+
+/* ---- mono meta / provenance line ---- */
+.r-mono { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; }
+.r-mono--tight { font-size: var(--meta-size); letter-spacing: 0; }
+
+/* ---- provenance strip (who/what wrote this, when, from where) ---- */
+.r-prov {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted);
+  letter-spacing: 0;
+}
+.r-prov b { color: var(--ink); font-weight: 650; }
+.r-actor { font-weight: 650; letter-spacing: var(--lab-track); }
+.r-actor[data-who="robin"] { color: var(--blue); }
+.r-actor[data-who="human"] { color: var(--ink); }
+
+/* ---- tone dot: round marker for health/tone (replaces the v1 squares) ---- */
+.r-dot {
+  display: inline-block; flex: none;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted);
+}
+.r-dot[data-tone="accent"] { background: var(--blue); }
+.r-dot[data-tone="good"] { background: var(--good); }
+.r-dot[data-tone="warn"] { background: var(--warn); }
+.r-dot[data-tone="bad"], .r-dot[data-tone="overdue"] { background: var(--red); }
+.r-dot[data-tone="muted"], .r-dot[data-tone="idle"] { background: var(--muted); }
+
+/* ---- focus + motion floor ---- */
+:where(a, button, [tabindex], input, textarea, select):focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 820px) { .r-btn { min-height: 44px; } }
+
+/* ---- scrollbar ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }

@@ -30,9 +30,9 @@ export default function Error({
         title="Could not load the maintenance snapshot."
         sub="A vault scan failed to complete. Your vault is fine — this is just the view."
       />
-      <Card className="gap-3 border-l-[3px] border-l-[var(--warning-rust)] p-4">
+      <Card className="gap-3 border-l-[3px] border-l-[var(--red)] p-4">
         <div className="flex items-center gap-2 text-foreground">
-          <AlertOctagon size={15} strokeWidth={1.5} style={{ color: 'var(--warning-rust)' }} />
+          <AlertOctagon size={15} strokeWidth={1.5} style={{ color: 'var(--red)' }} />
           <span className="font-mono text-[13px]">
             {error.message || 'Unexpected error'}
             {error.digest ? ` (${error.digest})` : ''}

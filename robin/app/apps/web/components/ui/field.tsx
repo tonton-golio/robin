@@ -17,7 +17,8 @@ export function Field({
     <div className="grid gap-1.5">
       <Label htmlFor={htmlFor} className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
         {label}
-        {hint ? <span className="ml-1 normal-case tracking-normal opacity-70">{hint}</span> : null}
+        {/* Same --muted tier as the label: hints never get an opacity tier (spec 10a). */}
+        {hint ? <span className="ml-1 normal-case tracking-normal">{hint}</span> : null}
       </Label>
       {children}
     </div>

@@ -11,7 +11,8 @@
   "include": [
     "playwright.config.ts",
     "specs/**/*.ts",
-    "helpers/**/*.ts"
+    "helpers/**/*.ts",
+    "fixtures/**/*.ts"
   ],
   "exclude": [
     "node_modules",

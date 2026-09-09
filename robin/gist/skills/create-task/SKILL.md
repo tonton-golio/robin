@@ -37,7 +37,6 @@ Encode task-creation policy on top of the page-creation primitive. Ensures every
 3. **Apply defaults:**
    - `priority: p2`
    - `owner: {{USER_NAME}}`
-   - `workflow: next`
    - `source: manual` (unless invoked by another skill — then use that skill's name or the source path).
    - `status: open`
 
@@ -50,7 +49,6 @@ Encode task-creation policy on top of the page-creation primitive. Ensures every
    <meta name="robin:type" content="task">
    <meta name="robin:status" content="open">
    <meta name="robin:priority" content="p2">
-   <meta name="robin:workflow" content="next">
    <meta name="robin:owner" content="{{USER_NAME}}">
    <meta name="robin:source" content="manual">
    <meta name="robin:created" content="{ISO-8601 UTC now}">

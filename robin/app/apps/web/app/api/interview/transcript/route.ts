@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
 import path from "path";
+import crypto from "node:crypto";
 import { convertMarkdown } from "@robin/converter";
+import { durableWriteNew } from "@robin/vault-io";
 import { safeInterviewSlug } from "@/lib/build-system-prompt";
 import { vaultPageHref } from "@/lib/routes";
 import { vaultPath } from "@/lib/vault";
-import { notifyIndexerWrite, writePage } from "@/lib/write-page";
+import { writePage } from "@/lib/write-page";
 
 /**
  * POST /api/interview/transcript
@@ -29,26 +30,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const safeSlug = safeInterviewSlug(slug, "interview");
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, 19);
-  const filename = `${timestamp}-${safeSlug}.md`;
-  const htmlFilename = `${timestamp}-${safeSlug}.html`;
+  const captureSuffix = crypto.randomUUID().slice(0, 8);
+  const filename = `${timestamp}-${safeSlug}-${captureSuffix}.md`;
+  const htmlFilename = `${timestamp}-${safeSlug}-${captureSuffix}.html`;
 
   const sourceDir = vaultPath("inbox", "interviews");
-  const interviewsDir = vaultPath("logs", "interviews");
-  try {
-    await fs.mkdir(sourceDir, { recursive: true });
-    await fs.mkdir(interviewsDir, { recursive: true });
-  } catch {
-    // already exists
-  }
 
   const absPath = path.join(sourceDir, filename);
   try {
-    await fs.writeFile(absPath, markdown, "utf-8");
+    await durableWriteNew(absPath, markdown);
   } catch (e) {
-    return NextResponse.json(
-      { error: `Failed to write file: ${String(e)}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `Failed to write file: ${String(e)}` }, { status: 500 });
   }
 
   const vaultRelPath = `inbox/interviews/${filename}`;
@@ -73,8 +65,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       outputPath: htmlRelPath,
       title: safeSlug,
     });
-    await writePage({ vaultRelativePath: htmlRelPath, html: converted.html });
-    void notifyIndexerWrite(htmlRelPath);
+    await writePage({
+      vaultRelativePath: htmlRelPath,
+      html: converted.html,
+      expectedHash: null,
+    });
   } catch (e) {
     return NextResponse.json(
       {

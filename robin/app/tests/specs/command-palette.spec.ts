@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/robin-test';
 
 /**
  * command-palette.spec.ts
@@ -37,10 +37,10 @@ test.describe('command palette', () => {
 
   test('command term filters the list', async ({ page }) => {
     const input = await openPalette(page);
-    await input.fill('/graph');
+    await input.fill('/tasks');
     const items = page.locator(`${PALETTE} .robin-cmdk-item`);
     await expect(items).toHaveCount(1);
-    await expect(items.first()).toContainText('Open Graph');
+    await expect(items.first()).toContainText('Open Tasks');
   });
 
   test('filtering matches on keywords, not just the label', async ({ page }) => {
@@ -56,11 +56,11 @@ test.describe('command palette', () => {
     await expect(page.locator(`${PALETTE} .robin-cmdk-empty`)).toContainText('No command matches');
   });
 
-  test('running a command navigates (Enter on /graph)', async ({ page }) => {
+  test('running a command navigates (Enter on /tasks)', async ({ page }) => {
     const input = await openPalette(page);
-    await input.fill('/graph');
+    await input.fill('/tasks');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/graph$/);
+    await expect(page).toHaveURL(/\/tasks$/);
     await expect(page.locator(PALETTE)).toHaveCount(0);
   });
 

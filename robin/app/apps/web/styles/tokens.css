@@ -1,0 +1,214 @@
+/* Robin design tokens - "Living Archive" v3 (2026-07).
+   Deep slate grounds + a copper archive accent. Separation comes from surface + soft
+   elevation, not from drawing a box: a surface gets either a border or a
+   shadow, never both, and prefers the shadow. `--line` survives only for
+   structural rules (rail edge, topbar edge, table header); interactive field
+   boundaries use `--line-strong`, which clears the 3:1 non-text contrast bar
+   that a 12% rule cannot; list rows separate with `--hairline`.
+   Text colours are tuned so `--muted` clears 4.5:1 on --paper, --card and
+   --card-2, and so the wash+text pairs (accent pill, overdue pill) clear it
+   too - that is why --muted/--blue/--red sit slightly darker in light and
+   slightly lighter in dark than a raw palette pick would suggest.
+   Dark is the SIGNATURE theme; light (daylight slate) is a first-class
+   alternate. The viewer toggle stamps data-theme on <html> and must win over
+   the media query in both directions.
+   Note: `--blue` keeps its name but is no longer Klein blue - read it as "the
+   accent". `--link` is the separate body-copy link colour. `--offset*` keep
+   their names but are soft elevation now, not hard poster offsets. */
+
+:root {
+  /* ---- light (alternate): daylight slate ---- */
+  --paper: #F1F2F5;         /* app ground */
+  --card: #FFFFFF;          /* raised surface - the primary separation device */
+  --card-2: #F7F8FA;        /* nested/raised-on-raised (menus, popovers, hover) */
+  --ink: #23262C;           /* body text */
+  --muted: #5F6672;         /* secondary text - 5.17:1 on --paper, 5.78:1 on --card,
+                               5.44:1 on --card-2 (spec section 10b). Extra headroom
+                               over the earlier #646B76 because dimmed text is banned */
+  --line: color-mix(in srgb, #23262C 12%, transparent);      /* structural, rare */
+  --line-strong: color-mix(in srgb, #23262C 50%, transparent); /* field borders - 3:1 */
+  --hairline: color-mix(in srgb, #23262C 8%, transparent);   /* list separators */
+  --on-ink: #F1F2F5;        /* text sitting on an ink fill */
+
+  /* accent + link are deliberately separate roles */
+  --blue: #7A4E27;          /* compatibility name: archive accent text */
+  --blue-deep: #623D1E;     /* hover/active */
+  --on-blue: #FFFFFF;
+  --link: #70451F;
+  /* washes mix from the hex of the colour they are named after (invariant 9) */
+  --accent-wash: color-mix(in srgb, #BC8953 13%, transparent);
+  --accent-mark: #8A5A2E;
+  --accent-text: #7A4E27;
+
+  --red: #B12F28;           /* overdue + destructive ONLY - 4.93:1 on --red-wash
+                               over --paper, 5.50:1 over --card */
+  --on-red: #FFFFFF;
+  --red-wash: color-mix(in srgb, #B12F28 9%, transparent);
+
+  /* semantic health (separate from accent) - 6.81:1 / 5.52:1 on --paper;
+     on their own 14%/12% washes over --paper: 5.52:1 / 4.69:1 */
+  --good: #116039;
+  --warn: #7A5D0F;
+
+  --shadow-ink: #23262C;    /* elevation tint */
+
+  /* ---- elevation (light values; dark overrides below) ----
+     level 1 = --offset-sm, level 2 = --offset, level 3 = --offset-lg */
+  --offset: 0 1px 2px rgb(35 38 44 / 0.10), 0 8px 20px -8px rgb(35 38 44 / 0.16);
+  --offset-sm: 0 1px 2px rgb(35 38 44 / 0.10);
+  --offset-lg: 0 2px 4px rgb(35 38 44 / 0.12), 0 18px 40px -14px rgb(35 38 44 / 0.22);
+
+  /* ---- legacy aliases so un-migrated rules still resolve during the swap.
+     These remap OLD graphite/amber var names onto the current palette;
+     delete once every page section is migrated. ---- */
+  --color-bg: var(--paper);
+  --color-surface: var(--card);
+  --color-border: var(--line);
+  --color-text: var(--ink);
+  --color-text-muted: var(--muted);
+  --color-accent: var(--blue);
+  --color-accent-hover: var(--blue-deep);
+  --color-link: var(--link);
+  --color-link-broken: var(--red);
+  --color-link-archived: var(--muted);
+  --bg-0: var(--paper); --bg-1: var(--card); --bg-2: var(--card-2); --bg-3: color-mix(in srgb, var(--ink) 10%, var(--paper));
+  --border-0: var(--line); --border-1: var(--hairline);
+  --text-0: var(--ink); --text-1: var(--muted); --text-2: color-mix(in srgb, var(--muted) 70%, var(--paper));
+  --robin-amber: var(--blue); --signal-cyan: var(--blue); --decision-violet: var(--blue);
+  --warning-rust: var(--red); --status-stable: var(--good);
+
+  /* ---- type: Helvetica Neue for UI, mono for data/provenance, a real serif
+     for reader prose ---- */
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --font-serif: Charter, "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-doc: var(--font-serif);
+
+  /* Living Workspace geometry. These are intentionally separate from legacy
+     page dimensions so the shell can migrate without a global rewrite. */
+  --workspace-ground: var(--paper);
+  --sidebar-surface: var(--card);
+  --document-surface: var(--card);
+  --raised-surface: var(--card-2);
+  --sidebar-width: 260px;
+  --context-width: 320px;
+  --topbar-height: 58px;
+  --mobile-nav-height: 72px;
+
+  /* ---- micro-label treatment: one shared eyebrow/section-label recipe.
+     11px is a hard floor - nothing in the UI is smaller. ---- */
+  --lab-size: 11px;
+  --lab-track: 0.06em;
+  --lab-weight: 600;
+  --lab-case: uppercase;    /* eyebrows/section labels only */
+  --meta-size: 11px;        /* mono provenance lines */
+
+  /* ---- shape: a soft 6px radius family; 999px for pills and dots ---- */
+  --radius: 6px; --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px; --radius-xl: 14px;
+
+  /* accent glow - for the rare accent-forward surface (never a colour field) */
+  --glow-accent: 0 10px 30px -12px color-mix(in srgb, var(--blue) 45%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* ---- dark (signature): quiet slate ---- */
+    --paper: #1B2026;
+    --card: #252C34;
+    --card-2: #2C343D;
+    --ink: #DDE1E5;         /* never pure white */
+    --muted: #9AA3AF;
+    --line: #37404A;
+    --line-strong: #56616D;
+    --hairline: #303841;
+    --on-ink: #1B2026;
+    --blue: #D19B63;        /* compatibility name: high-contrast copper text */
+    --blue-deep: #E1B17D;
+    --on-blue: #181C20;
+    --link: #D9AA78;
+    /* washes mix the dark --blue / --red hexes (invariant 9) */
+    --accent-wash: #3B332C;
+    --accent-mark: #BC8953;
+    --accent-text: #D19B63;
+    --red: #DC7D76;
+    --on-red: #1B2026;
+    --red-wash: #3C292B;
+    --good: #77BF96;
+    --warn: #D9B866;
+    --shadow-ink: #000000;
+    --sidebar-surface: #20262D;
+    --offset: 0 1px 2px rgb(0 0 0 / 0.40), 0 10px 24px -10px rgb(0 0 0 / 0.55);
+    --offset-sm: 0 1px 2px rgb(0 0 0 / 0.40);
+    --offset-lg: 0 2px 4px rgb(0 0 0 / 0.45), 0 18px 40px -14px rgb(0 0 0 / 0.60);
+  }
+}
+
+/* explicit toggle overrides the media query in BOTH directions */
+:root[data-theme="light"] {
+  --paper: #F1F2F5; --card: #FFFFFF; --card-2: #F7F8FA;
+  --ink: #23262C; --muted: #5F6672;   /* 5.17 paper / 5.78 card / 5.44 card-2 */
+  --line: color-mix(in srgb, #23262C 12%, transparent);
+  --line-strong: color-mix(in srgb, #23262C 50%, transparent);
+  --hairline: color-mix(in srgb, #23262C 8%, transparent);
+  --on-ink: #F1F2F5;
+  --blue: #7A4E27; --blue-deep: #623D1E; --on-blue: #FFFFFF; --link: #70451F;
+  --accent-wash: color-mix(in srgb, #BC8953 13%, transparent);
+  --accent-mark: #8A5A2E; --accent-text: #7A4E27;
+  --red: #B12F28; --on-red: #FFFFFF;
+  --red-wash: color-mix(in srgb, #B12F28 9%, transparent);      /* mixes --red */
+  --good: #116039; --warn: #7A5D0F;   /* 6.81:1 / 5.52:1 on --paper */
+  --shadow-ink: #23262C;
+  --sidebar-surface: #FFFFFF;
+  --offset: 0 1px 2px rgb(35 38 44 / 0.10), 0 8px 20px -8px rgb(35 38 44 / 0.16);
+  --offset-sm: 0 1px 2px rgb(35 38 44 / 0.10);
+  --offset-lg: 0 2px 4px rgb(35 38 44 / 0.12), 0 18px 40px -14px rgb(35 38 44 / 0.22);
+}
+:root[data-theme="dark"] {
+  --paper: #1B2026; --card: #252C34; --card-2: #2C343D;
+  --ink: #DDE1E5; --muted: #9AA3AF;
+  --line: #37404A;
+  --line-strong: #56616D;
+  --hairline: #303841;
+  --on-ink: #1B2026;
+  --blue: #D19B63; --blue-deep: #E1B17D; --on-blue: #181C20; --link: #D9AA78;
+  --accent-wash: #3B332C;
+  --accent-mark: #BC8953; --accent-text: #D19B63;
+  --red: #DC7D76; --on-red: #1B2026;
+  --red-wash: #3C292B;
+  --good: #77BF96; --warn: #D9B866;
+  --shadow-ink: #000000;
+  --sidebar-surface: #20262D;
+  --offset: 0 1px 2px rgb(0 0 0 / 0.40), 0 10px 24px -10px rgb(0 0 0 / 0.55);
+  --offset-sm: 0 1px 2px rgb(0 0 0 / 0.40);
+  --offset-lg: 0 2px 4px rgb(0 0 0 / 0.45), 0 18px 40px -14px rgb(0 0 0 / 0.60);
+}
+
+/* shadcn/Radix token bridge - map semantic component tokens onto the Quiet
+   Slate palette so primitives inherit slate/accent surfaces. `inline` keeps
+   var() live so the theme toggle still reaches them. */
+@theme inline {
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-card: var(--card);
+  --color-card-foreground: var(--ink);
+  --color-card-2: var(--card-2);
+  --color-popover: var(--card-2);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--blue);
+  --color-primary-foreground: var(--on-blue);
+  --color-secondary: var(--card);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--card);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--blue);
+  --color-accent-foreground: var(--on-blue);
+  --color-destructive: var(--red);
+  --color-destructive-foreground: var(--on-red);
+  --color-border: var(--line);
+  --color-input: var(--line-strong);   /* field boundaries need 3:1, not 12% */
+  --color-ring: var(--blue);
+  --radius: 6px; --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px; --radius-xl: 14px;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --font-serif: Charter, "Source Serif 4", "Iowan Old Style", Georgia, serif;
+}

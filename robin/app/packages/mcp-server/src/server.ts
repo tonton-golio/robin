@@ -4,40 +4,42 @@
  * Registers all tools via the @modelcontextprotocol/sdk and binds to stdio.
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   ErrorCode,
   McpError,
-} from '@modelcontextprotocol/sdk/types.js';
-import { z, ZodError } from 'zod/v4';
+} from "@modelcontextprotocol/sdk/types.js";
+import { z, ZodError } from "zod/v4";
+import { VaultConflictError } from "@robin/vault-io";
 
-import type { ToolContext } from './types.js';
+import type { ToolContext } from "./types.js";
 
 // Tool handlers
-import { PageReadInputSchema, pageRead } from './tools/page-read.js';
-import { PageWriteInputSchema, pageWrite } from './tools/page-write.js';
-import { PageWriteManyInputSchema, pageWriteMany } from './tools/page-write-many.js';
-import { PageCreateInputSchema, pageCreate } from './tools/page-create.js';
-import { PageMoveInputSchema, pageMove } from './tools/page-move.js';
-import { PageDeleteInputSchema, pageDelete } from './tools/page-delete.js';
-import { PageSearchInputSchema, pageSearch } from './tools/page-search.js';
-import { PageListInputSchema, pageList } from './tools/page-list.js';
-import { LinkAddInputSchema, linkAdd } from './tools/link-add.js';
-import { LinkListInputSchema, linkList } from './tools/link-list.js';
-import { LogAppendInputSchema, logAppend } from './tools/log-append.js';
-import { TaskCreateInputSchema, taskCreate } from './tools/task-create.js';
-import { TaskUpdateInputSchema, taskUpdate } from './tools/task-update.js';
-import { IndexRefreshInputSchema, indexRefresh } from './tools/index-refresh.js';
-import { VaultLintInputSchema, vaultLint } from './tools/vault-lint.js';
-import { VaultStatsInputSchema, vaultStats } from './tools/vault-stats.js';
-import { MemorySaveInputSchema, memorySave } from './tools/memory-save.js';
-import { MemorySearchInputSchema, memorySearch } from './tools/memory-search.js';
-import { MemoryListInputSchema, memoryList } from './tools/memory-list.js';
-import { MemoryResolveInputSchema, memoryResolve } from './tools/memory-resolve.js';
-import { KnowledgeSearchInputSchema, knowledgeSearch } from './tools/knowledge-search.js';
+import { PageReadInputSchema, pageRead } from "./tools/page-read.js";
+import { PageWriteInputSchema, pageWrite } from "./tools/page-write.js";
+import { PageWriteManyInputSchema, pageWriteMany } from "./tools/page-write-many.js";
+import { PageCreateInputSchema, pageCreate } from "./tools/page-create.js";
+import { PageMoveInputSchema, pageMove } from "./tools/page-move.js";
+import { PageDeleteInputSchema, pageDelete } from "./tools/page-delete.js";
+import { PageSearchInputSchema, pageSearch } from "./tools/page-search.js";
+import { PageListInputSchema, pageList } from "./tools/page-list.js";
+import { LinkAddInputSchema, linkAdd } from "./tools/link-add.js";
+import { LinkListInputSchema, linkList } from "./tools/link-list.js";
+import { LogAppendInputSchema, logAppend } from "./tools/log-append.js";
+import { TaskCreateInputSchema, taskCreate } from "./tools/task-create.js";
+import { TaskUpdateInputSchema, taskUpdate } from "./tools/task-update.js";
+import { IndexRefreshInputSchema, indexRefresh } from "./tools/index-refresh.js";
+import { VaultLintInputSchema, vaultLint } from "./tools/vault-lint.js";
+import { VaultStatsInputSchema, vaultStats } from "./tools/vault-stats.js";
+import { MemorySaveInputSchema, memorySave } from "./tools/memory-save.js";
+import { MemorySearchInputSchema, memorySearch } from "./tools/memory-search.js";
+import { MemoryListInputSchema, memoryList } from "./tools/memory-list.js";
+import { MemoryResolveInputSchema, memoryResolve } from "./tools/memory-resolve.js";
+import { KnowledgeSearchInputSchema, knowledgeSearch } from "./tools/knowledge-search.js";
+import { setMcpWriteContext } from "./html-utils.js";
 
 // ── Tool registry ──────────────────────────────────────────────────────────
 
@@ -52,128 +54,144 @@ interface ToolDef {
 
 const TOOLS: ToolDef[] = [
   {
-    name: 'page.read',
-    description: 'Read a Robin page by slug or vault-relative path. Returns meta, frontmatter, blocks, body HTML, and link graph.',
+    name: "page.read",
+    description:
+      "Read a Robin page by slug or vault-relative path. Returns a content_hash for optimistic concurrency plus meta, body, and links.",
     schema: PageReadInputSchema,
     handler: pageRead,
   },
   {
-    name: 'page.write',
-    description: 'Update an existing page. Pass body_md to replace the body; frontmatter is merged (pass null on a field to clear it). Body input is markdown only (v0.2).',
+    name: "page.write",
+    description:
+      "Update an existing page. Pass page.read content_hash as expected_hash to reject stale edits. Frontmatter is merged; body input is markdown only (v0.2).",
     schema: PageWriteInputSchema,
     handler: pageWrite,
   },
   {
-    name: 'page.write_many',
-    description: 'Batch write multiple pages. Errors are per-item; does not short-circuit. Critical for ingest-meeting.',
+    name: "page.write_many",
+    description:
+      "Batch write multiple pages. Errors are per-item; does not short-circuit. Critical for ingest-meeting.",
     schema: PageWriteManyInputSchema,
     handler: pageWriteMany,
   },
   {
-    name: 'page.create',
-    description: 'Create a new page. Errors on slug collision (409). folder is vault-relative, e.g. brain/tasks.',
+    name: "page.create",
+    description:
+      "Create a new page. Errors on slug collision (409). folder is vault-relative, e.g. brain/tasks.",
     schema: PageCreateInputSchema,
     handler: pageCreate,
   },
   {
-    name: 'page.move',
-    description: 'Move/rename a page on disk. Does NOT rewrite incoming wikilinks (they resolve by slug via index).',
+    name: "page.move",
+    description:
+      "Move/rename a page on disk. Does NOT rewrite incoming wikilinks (they resolve by slug via index).",
     schema: PageMoveInputSchema,
     handler: pageMove,
   },
   {
-    name: 'page.delete',
-    description: 'Delete or archive a page. archive=true (default) moves to nearest sibling archive/ folder.',
+    name: "page.delete",
+    description:
+      "Delete or archive a page. archive=true (default) moves to nearest sibling archive/ folder.",
     schema: PageDeleteInputSchema,
     handler: pageDelete,
   },
   {
-    name: 'page.search',
-    description: 'Full-text + vector search. Returns mode=fallback with empty hits if indexer is unavailable.',
+    name: "page.search",
+    description:
+      "Full-text + vector search. Returns mode=fallback with empty hits if indexer is unavailable.",
     schema: PageSearchInputSchema,
     handler: pageSearch,
   },
   {
-    name: 'page.list',
-    description: 'List pages with metadata filtering. Uses indexer if available, falls back to filesystem scan.',
+    name: "page.list",
+    description:
+      "List pages with metadata filtering. Uses indexer if available, falls back to filesystem scan.",
     schema: PageListInputSchema,
     handler: pageList,
   },
   {
-    name: 'link.add',
+    name: "link.add",
     description: "Add a named link from one page to another. kind defaults to 'ref'.",
     schema: LinkAddInputSchema,
     handler: linkAdd,
   },
   {
-    name: 'link.list',
+    name: "link.list",
     description: "List links for a page. direction: 'in' (backlinks, default), 'out', or 'both'.",
     schema: LinkListInputSchema,
     handler: linkList,
   },
   {
-    name: 'log.append',
-    description: 'Atomic prepend to logs/changelog.md or logs/ingest-log.md. Injects date header if missing.',
+    name: "log.append",
+    description:
+      "Atomic prepend to logs/changelog.md or logs/ingest-log.md. Injects date header if missing.",
     schema: LogAppendInputSchema,
     handler: logAppend,
   },
   {
-    name: 'task.create',
-    description: 'Create a task page (in brain/tasks/) and log it to the changelog. Slug derived from title. New tasks open with canonical robin:status="open".',
+    name: "task.create",
+    description:
+      'Create a task page (in brain/tasks/) and log it to the changelog. Slug derived from title. New tasks open with canonical robin:status="open".',
     schema: TaskCreateInputSchema,
     handler: taskCreate,
   },
   {
-    name: 'task.update',
-    description: "Update a task's lifecycle status (and optionally priority/owner/due) on an existing page. Writes canonical robin:status, preserves the body, and appends a changelog line. The first-class way to move a task to in-progress/done/blocked.",
+    name: "task.update",
+    description:
+      "Update a task's lifecycle status (and optionally priority/owner/due) on an existing page. Writes canonical robin:status, preserves the body, and appends a changelog line. The first-class way to move a task to in-progress/done/blocked.",
     schema: TaskUpdateInputSchema,
     handler: taskUpdate,
   },
   {
-    name: 'index.refresh',
-    description: 'Force a full vault rescan into the SQLite index (search/backlinks/resolution). Writes do not incrementally update the index; run this after a batch of writes. Same scan as the web /api/resync. Returns mode=no-index if the server has no indexer.',
+    name: "index.refresh",
+    description:
+      "Force a full reconciliation scan of the SQLite index. Normal writes refresh changed paths incrementally; use this to reconcile out-of-band changes. Returns mode=no-index if no indexer is attached.",
     schema: IndexRefreshInputSchema,
     handler: indexRefresh,
   },
   {
-    name: 'vault.lint',
-    description: 'Run structural lint checks: frontmatter completeness, broken wikilinks, orphans, staleness.',
+    name: "vault.lint",
+    description:
+      "Run structural lint checks: frontmatter completeness, broken wikilinks, orphans, staleness.",
     schema: VaultLintInputSchema,
     handler: vaultLint,
   },
   {
-    name: 'vault.stats',
-    description: 'Aggregate vault statistics: page counts by type/tier, links, broken links, ambiguous slugs.',
+    name: "vault.stats",
+    description:
+      "Aggregate vault statistics: page counts by type/tier, links, broken links, ambiguous slugs.",
     schema: VaultStatsInputSchema,
     handler: vaultStats,
   },
   {
-    name: 'memory.save',
-    description: 'Save a durable Robin memory with provenance. Exact duplicates increment seen_count instead of creating noise.',
+    name: "memory.save",
+    description:
+      "Save a durable Robin memory with provenance. Exact duplicates increment seen_count instead of creating noise.",
     schema: MemorySaveInputSchema,
     handler: memorySave,
   },
   {
-    name: 'memory.search',
-    description: 'Search promoted Robin memories from brain/memory/events.jsonl.',
+    name: "memory.search",
+    description: "Search promoted Robin memories from brain/memory/events.jsonl.",
     schema: MemorySearchInputSchema,
     handler: memorySearch,
   },
   {
-    name: 'memory.list',
-    description: 'List promoted Robin memories with status/type/scope/tag filters.',
+    name: "memory.list",
+    description: "List promoted Robin memories with status/type/scope/tag filters.",
     schema: MemoryListInputSchema,
     handler: memoryList,
   },
   {
-    name: 'memory.resolve',
-    description: 'Mark a Robin memory active, tentative, superseded, rejected, or archived with a resolution note.',
+    name: "memory.resolve",
+    description:
+      "Mark a Robin memory active, tentative, superseded, rejected, or archived with a resolution note.",
     schema: MemoryResolveInputSchema,
     handler: memoryResolve,
   },
   {
-    name: 'knowledge.search',
-    description: 'Unified repo knowledge search: promoted memories plus indexed brain/out pages.',
+    name: "knowledge.search",
+    description: "Unified repo knowledge search: promoted memories plus indexed brain/out pages.",
     schema: KnowledgeSearchInputSchema,
     handler: knowledgeSearch,
   },
@@ -186,17 +204,14 @@ export function getToolList() {
 // ── Server bootstrap ───────────────────────────────────────────────────────
 
 export async function createServer(ctx: ToolContext): Promise<Server> {
-  const server = new Server(
-    { name: 'robin', version: '0.0.1' },
-    { capabilities: { tools: {} } }
-  );
+  const server = new Server({ name: "robin", version: "0.0.1" }, { capabilities: { tools: {} } });
 
   // List tools
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOLS.map((t) => ({
       name: t.name,
       description: t.description,
-      inputSchema: z.toJSONSchema(t.schema, { io: 'input' }),
+      inputSchema: z.toJSONSchema(t.schema, { io: "input" }),
     })),
   }));
 
@@ -216,38 +231,52 @@ export async function createServer(ctx: ToolContext): Promise<Server> {
       if (err instanceof ZodError) {
         throw new McpError(
           ErrorCode.InvalidParams,
-          `Invalid arguments for ${name}: ${err.issues.map((i) => i.message).join('; ')}`
+          `Invalid arguments for ${name}: ${err.issues.map((i) => i.message).join("; ")}`,
         );
       }
       throw err;
     }
 
+    // Stamp the per-request write context so any page mutation this tool makes
+    // (via html-utils writePage → vault-io) is attributed with the vault root +
+    // tool name and recorded in the edit log. Cleared in finally so a write
+    // outside a tool call is never mis-attributed. Dispatch is serial.
+    setMcpWriteContext({
+      vaultRoot: ctx.vaultPath,
+      tool: name,
+      ...(ctx.indexer ? { refresh: (paths: string[]) => ctx.indexer!.refresh(paths) } : {}),
+    });
     try {
       const result = await tool.handler(parsed, ctx);
       return {
         content: [
           {
-            type: 'text' as const,
+            type: "text" as const,
             text: JSON.stringify(result, null, 2),
           },
         ],
       };
     } catch (err) {
+      if (err instanceof VaultConflictError) {
+        throw new McpError(-32009, "Page changed since it was read; read it again before writing", {
+          expected_hash: err.expectedHash,
+          actual_hash: err.actualHash,
+        });
+      }
       // MCP errors from tools (slug ambiguity, not found, etc.)
       if (
-        typeof err === 'object' &&
+        typeof err === "object" &&
         err !== null &&
-        'code' in err &&
-        typeof (err as { code: unknown }).code === 'number'
+        "code" in err &&
+        typeof (err as { code: unknown }).code === "number"
       ) {
         const e = err as { code: number; message: string; data?: unknown };
         throw new McpError(e.code, e.message, e.data);
       }
       // Generic errors
-      throw new McpError(
-        ErrorCode.InternalError,
-        err instanceof Error ? err.message : String(err)
-      );
+      throw new McpError(ErrorCode.InternalError, err instanceof Error ? err.message : String(err));
+    } finally {
+      setMcpWriteContext(null);
     }
   });
 

@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robin.local/schemas/v1/memory-event.schema.json",
+  "title": "Robin memory event",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/saved"
+    },
+    {
+      "$ref": "#/$defs/seen"
+    },
+    {
+      "$ref": "#/$defs/resolved"
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": {
+          "enum": ["annotation", "conversation", "manual", "meeting", "other", "repo", "tool"]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quote": {
+          "type": "string"
+        },
+        "captured_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "memory": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "tier",
+        "status",
+        "scope",
+        "subject",
+        "summary",
+        "sources",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "correction",
+            "decision",
+            "other",
+            "pattern",
+            "person",
+            "preference",
+            "procedure",
+            "project",
+            "repo",
+            "task"
+          ]
+        },
+        "tier": {
+          "enum": ["episodic", "procedural", "semantic", "working"]
+        },
+        "status": {
+          "enum": ["active", "archived", "rejected", "superseded", "tentative"]
+        },
+        "confidence": {
+          "enum": ["high", "low", "medium"]
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!\\.\\.?(?:/|$))(?!.*//)(?!.*\\/\\.\\.?(?:/|$))(?!.*\\\\)[^\\r\\n]+$"
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "body": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "last_seen_at": {
+          "type": "string"
+        },
+        "seen_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fingerprint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "saved": {
+      "type": "object",
+      "required": ["event", "memory"],
+      "properties": {
+        "event": {
+          "const": "memory.saved"
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "memory": {
+          "$ref": "#/$defs/memory"
+        }
+      },
+      "additionalProperties": true
+    },
+    "seen": {
+      "type": "object",
+      "required": ["event", "id", "seen_at"],
+      "properties": {
+        "event": {
+          "const": "memory.seen"
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seen_at": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        }
+      },
+      "additionalProperties": true
+    },
+    "resolved": {
+      "type": "object",
+      "required": ["event", "id", "status", "resolved_at", "resolution"],
+      "properties": {
+        "event": {
+          "const": "memory.resolved"
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": ["active", "archived", "rejected", "superseded", "tentative"]
+        },
+        "resolved_at": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "string",
+          "minLength": 1
+        },
+        "superseded_by": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

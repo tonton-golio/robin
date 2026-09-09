@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robin.local/schemas/workspace-manifest.schema.json",
+  "title": "Robin workspace manifest",
+  "description": "Lifecycle, version-control, privacy, and recovery classification for the canonical vault and projects under the ignored repos root. Git and an origin remote are replication, not an independent backup.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "repos_root", "policy", "vault", "entries"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "repos_root": {
+      "type": "string",
+      "pattern": "^[^/].*"
+    },
+    "policy": {
+      "type": "string"
+    },
+    "vault": {
+      "$ref": "#/$defs/vault"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "vault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "backup", "data_class"],
+      "properties": {
+        "path": {
+          "const": "base"
+        },
+        "backup": {
+          "enum": ["external-backup", "required"]
+        },
+        "backup_owner": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "backup_due": {
+          "type": "string",
+          "format": "date"
+        },
+        "backup_system": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "restore_tested_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "data_class": {
+          "enum": ["company-private", "personal-private", "public", "mixed"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "backup": {
+                "const": "external-backup"
+              }
+            },
+            "required": ["backup"]
+          },
+          "then": {
+            "properties": {
+              "backup_owner": {},
+              "backup_system": {},
+              "restore_tested_at": {}
+            },
+            "required": ["backup_owner", "backup_system", "restore_tested_at"]
+          }
+        }
+      ]
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "role", "lifecycle", "vcs", "backup", "data_class"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^repos/"
+        },
+        "role": {
+          "enum": [
+            "clone",
+            "local-project",
+            "reference",
+            "container",
+            "worktree-root",
+            "private-data"
+          ]
+        },
+        "lifecycle": {
+          "enum": ["active", "reference", "archived", "scratch", "infrastructure"]
+        },
+        "vcs": {
+          "enum": ["git", "none"]
+        },
+        "backup": {
+          "description": "Independent recovery posture. remote-git is a legacy replication-only label and does not satisfy the backup requirement.",
+          "enum": ["remote-git", "external-backup", "rebuildable", "required", "none-intentional"]
+        },
+        "backup_owner": {
+          "description": "Accountable person or team for closing a required backup gap or operating the external backup.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "backup_due": {
+          "description": "Target date for resolving backup=required.",
+          "type": "string",
+          "format": "date"
+        },
+        "backup_system": {
+          "description": "Independent backup service, repository, or storage system; required when backup=external-backup.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "restore_tested_at": {
+          "description": "UTC timestamp of the latest successful restore proof; required when backup=external-backup.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "data_class": {
+          "enum": ["company-private", "personal-private", "public", "mixed"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "backup": {
+                "const": "remote-git"
+              }
+            },
+            "required": ["backup"]
+          },
+          "then": {
+            "properties": {
+              "vcs": {
+                "const": "git"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "backup": {
+                "const": "external-backup"
+              }
+            },
+            "required": ["backup"]
+          },
+          "then": {
+            "properties": {
+              "backup_owner": {},
+              "backup_system": {},
+              "restore_tested_at": {}
+            },
+            "required": ["backup_owner", "backup_system", "restore_tested_at"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "backup": {
+                "const": "none-intentional"
+              }
+            },
+            "required": ["backup"]
+          },
+          "then": {
+            "properties": {
+              "lifecycle": {
+                "const": "scratch"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "backup": {
+                "const": "rebuildable"
+              }
+            },
+            "required": ["backup"]
+          },
+          "then": {
+            "properties": {
+              "role": {
+                "enum": ["clone", "worktree-root"]
+              },
+              "lifecycle": {
+                "enum": ["reference", "scratch", "infrastructure"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
