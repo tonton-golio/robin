@@ -1,4 +1,4 @@
-.PHONY: doctor robin-ui
+.PHONY: doctor robin-ui out-posters
 
 # Robin reads and writes your personal vault. Point ROBIN_VAULT at it.
 # Defaults to ./base (the kit convention) relative to this repo root.
@@ -12,3 +12,7 @@ doctor:
 # Launch the local Robin web UI on http://localhost:8400
 robin-ui:
 	cd robin/app/apps/web && ROBIN_VAULT=$(ROBIN_VAULT) npm run dev
+
+# Rebuild static thumbnails for HTML pages and videos, including archives.
+out-posters:
+	ROBIN_VAULT="$(ROBIN_VAULT)" node robin/scripts/gen-out-posters.mjs

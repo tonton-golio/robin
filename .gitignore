@@ -65,3 +65,6 @@ robin-*.png
 *.swo
 .idea/
 .vscode/
+
+# Rebuildable artifact thumbnails (make out-posters).
+*.poster.jpg

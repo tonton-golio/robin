@@ -105,7 +105,7 @@ export default async function OutputsPage() {
                 {items.map((item) => {
                   return (
                     <Link key={item.path} href={item.href} className="output-tile">
-                      <OutputPreview path={item.path} />
+                      <OutputPreview path={item.path} poster={item.poster} />
                       <div className="output-tile-body">
                         <div className="output-tile-title">{item.title}</div>
                         <div className="output-tile-meta">
