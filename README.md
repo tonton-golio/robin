@@ -82,6 +82,28 @@ make doctor          # vault has brain/, secrets gitignored, page format, logs p
 
 > **The one variable that matters: `ROBIN_VAULT`.** It's the path to your vault (`base/`, created in step 2). The web app, the MCP server, and `doctor.sh` all read it. The shipped `Makefile` defaults it to `./base`; override per command with `make robin-ui ROBIN_VAULT=/abs/path`, or set it in `robin/app/apps/web/.env.local` and `.mcp.json`. Keep all three in agreement, or they'll point at different vaults.
 
+### Static output previews
+
+Output cards use generated thumbnails. Rebuild them after adding or editing
+artifacts, with Robin running on port 8400:
+
+```bash
+npm --prefix robin/app/tests ci
+make out-posters
+```
+
+HTML rendering uses Playwright Chromium, or installed Google Chrome when the
+bundled browser is absent. Install Chromium if needed with
+`cd robin/app/tests && npx playwright install chromium`. Video posters require
+`ffmpeg` on your PATH. Video-only and already-fresh runs do not start a browser.
+
+The command writes 640×400 `<stem>.poster.jpg` siblings for HTML pages and
+MP4/WebM/MOV videos, including archived pages and folder indexes. Format
+companions with the same stem share a poster. Unchanged posters are skipped;
+pass `--force`, `--base URL`, or explicit file paths directly to
+`node robin/scripts/gen-out-posters.mjs` when needed. Cards without a poster
+show a file icon; opening a card still opens the original document or video.
+
 ### Learn more
 
 - [`robin/gist/README.md`](./robin/gist/README.md) — what Robin is + the full repo layout

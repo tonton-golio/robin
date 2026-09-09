@@ -25,6 +25,8 @@ export interface OutputItem {
   href: string;
   mtime: Date;
   size: number;
+  /** Generated image sibling, shared by format companions with the same stem. */
+  poster?: string;
 }
 
 const OUTPUT_ROOTS = ['out'];
@@ -274,7 +276,9 @@ export async function listBrainPages(): Promise<CatalogPage[]> {
 
 export async function listOutputs(): Promise<OutputItem[]> {
   const vault = locateVault();
-  const files = (await Promise.all(OUTPUT_ROOTS.map((root) => walk(vault, root)))).flat()
+  const allFiles = (await Promise.all(OUTPUT_ROOTS.map((root) => walk(vault, root)))).flat();
+  const available = new Set(allFiles);
+  const files = allFiles
     .filter((file) => !file.endsWith('.DS_Store') && !file.endsWith('.gitkeep'))
     // Deck assets (images embedded in decks) are not standalone outputs.
     .filter((file) => !/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file));
@@ -292,6 +296,8 @@ export async function listOutputs(): Promise<OutputItem[]> {
         href: outputHref(file),
         mtime: stat.mtime,
         size: stat.size,
+        poster: available.has(file.replace(/\.[^.]+$/, '.poster.jpg'))
+          ? file.replace(/\.[^.]+$/, '.poster.jpg') : undefined,
       };
     } catch {
       return null;

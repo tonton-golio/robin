@@ -7,7 +7,7 @@
     "dev": "next dev -p 8400",
     "build": "next build",
     "start": "next start -p 8400",
-    "test": "vitest run lib/routes.test.ts lib/annotations.test.ts",
+    "test": "vitest run lib/routes.test.ts lib/annotations.test.ts lib/catalog.test.ts app/outputs/OutputPreview.test.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
