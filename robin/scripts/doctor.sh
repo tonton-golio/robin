@@ -10,6 +10,29 @@
 # with a different vault dir works unchanged.
 set -uo pipefail
 
+# ── arguments ───────────────────────────────────────────────────────────────
+REPORT_MODE=0
+for arg in "$@"; do
+  case "$arg" in
+    --report) REPORT_MODE=1;;
+    --help|-h)
+      cat <<'EOF'
+Usage: robin/scripts/doctor.sh [--report]
+
+  --report  Run every read-only check and print the full legacy-drift report,
+            but exit zero instead of enforcing the integrity gate.
+
+Without --report, ERROR-tier findings produce a non-zero exit status.
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $arg (try --help)" >&2
+      exit 2
+      ;;
+  esac
+done
+
 # ── repo root + vault resolution ────────────────────────────────────────────
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
@@ -94,6 +117,22 @@ check() {
   fi
 }
 
+# Repository gates must resolve the nested local Lefthook binary portably.
+check_workspace_hooks() {
+  [[ -d .githooks ]] || return 0
+  local configured
+  configured="$(git config --get core.hooksPath 2>/dev/null || true)"
+  if [[ "$configured" != ".githooks" || ! -x .githooks/pre-commit || ! -x .githooks/pre-push ]]; then
+    echo "Workspace hooks are not installed from .githooks. Run npm --prefix robin/app run hooks:install; custom hooks are preserved."
+    return 1
+  fi
+  if [[ ! -x robin/app/node_modules/.bin/lefthook ]]; then
+    echo "Workspace hook runner is missing. Install robin/app dependencies before committing."
+    return 1
+  fi
+}
+check WARN "Portable workspace Git hooks" check_workspace_hooks
+
 # ── shared page index (built once) ──────────────────────────────────────────
 # The linkable knowledge tree only: brain/ inbox/ logs/ out/. We deliberately
 # exclude repos/ and tools/ (and any .robin sidecar) — those hold node_modules,
@@ -110,6 +149,12 @@ find "${KNOWLEDGE_DIRS[@]}" -type f -name '*.html' -not -path '*/.robin/*' 2>/de
   | sort > "$TMP/paths"        # e.g. brain/risk-register, projects/beacon/beacon
 sed 's#.*/##' "$TMP/paths" | sort > "$TMP/basenames_all"   # with dups
 sort -u "$TMP/basenames_all" > "$TMP/basenames"            # unique
+
+# Ambiguity is only a problem for active linkable surfaces. Keep inbox/provenance
+# paths resolvable for explicit path-like links, but do not let archived source
+# copies fail the bare-slug ambiguity gate.
+grep -v '^inbox/' "$TMP/paths" > "$TMP/ambiguity_paths" || true
+sed 's#.*/##' "$TMP/ambiguity_paths" | sort > "$TMP/ambiguity_basenames_all"
 
 # Link targets used by the broken-link and orphan checks.
 #
@@ -158,27 +203,44 @@ resolves_ref() {
 #   - absolute /Users/<user>/(brain|inbox|out|notes) vault paths
 #   - legacy [[artifacts/raw/user_notes …]] wikilink prefixes
 check_no_stale_paths() {
-  local matches
+  local matches file
+  local -a search_roots=(CLAUDE.md .claude "$VAULT/brain" "$VAULT/out")
+  # Archived inbox material is immutable provenance. It can quote historical
+  # source paths (for example, code snippets mentioning artifacts/) without
+  # indicating that the current control plane leaks an old vault layout. Keep
+  # the mutable inbox surface covered by enumerating files outside that one
+  # archive subtree rather than excluding inbox wholesale.
+  if [[ -d "$VAULT/inbox" ]]; then
+    while IFS= read -r -d '' file; do
+      search_roots+=("$file")
+    done < <(find "$VAULT/inbox" -path "$VAULT/inbox/archived" -prune -o -type f -print0 2>/dev/null)
+  fi
   matches="$(search_files \
     '/Users/[^/]+/(brain|inbox|out|notes)/|\[\[(artifacts|raw|user_notes)/|`(artifacts|raw|user_notes)/' \
-    CLAUDE.md .claude "$VAULT/brain" "$VAULT/inbox" "$VAULT/out" 2>/dev/null \
+    "${search_roots[@]}" 2>/dev/null \
     | grep -v 'settings.local.json' \
     | grep -v 'logs/ingest-log.md' || true)"
   [[ -z "$matches" ]] || { printf '%s' "$matches"; return 1; }
 }
 
-# Every brain/*.html carries the v0.2 format contract:
-#   <meta name="robin:type">, <meta name="robin:updated">, <article data-robin-doc>,
-#   and NO legacy v0.1 JSON <script> blocks.
-check_format_contract() {
-  local bad="" f
-  while IFS= read -r f; do
-    grep -q '<meta name="robin:type"'    "$f" || bad+="$f: missing robin:type"$'\n'
-    grep -q '<meta name="robin:updated"' "$f" || bad+="$f: missing robin:updated"$'\n'
-    grep -q 'data-robin-doc'             "$f" || bad+="$f: missing <article data-robin-doc>"$'\n'
-    grep -q '<script type="application/json"' "$f" && bad+="$f: legacy v0.1 JSON <script> block"$'\n'
-  done < <(find "$VAULT/brain" -name '*.html' -type f)
-  [[ -z "$bad" ]] || { printf '%s' "$bad"; return 1; }
+# Versioned executable contract: exact page version/path, HTML-only brain
+# boundary, strict JSONL envelopes with file:line diagnostics, edit snapshot
+# references, pending transaction receipts, and shadow vault roots.
+check_executable_contract() {
+  command -v node >/dev/null 2>&1 || {
+    echo "node is required for robin/scripts/vault-integrity.mjs"
+    return 1
+  }
+  local mode="--strict" out
+  [[ "$REPORT_MODE" -eq 1 ]] && mode="--report"
+  out="$(node "$ROOT/robin/scripts/vault-integrity.mjs" \
+    --vault "$VAULT" \
+    --repo-root "$ROOT" \
+    "$mode")"
+  printf '%s\n' "$out"
+  # In doctor report mode the validator itself exits zero by design. Preserve
+  # the finding in doctor's summary while the final doctor exit remains zero.
+  [[ "$out" == *"Integrity summary: 0 error(s),"* ]]
 }
 
 # Broken wikilinks: every referenced target must resolve to a page.
@@ -196,13 +258,33 @@ check_broken_wikilinks() {
 # '_index' is exempt — every dir has one and they resolve by path, not slug.
 check_ambiguous_slugs() {
   local dups
-  dups="$(uniq -d "$TMP/basenames_all" | grep -vxF '_index' || true)"
+  dups="$(uniq -d "$TMP/ambiguity_basenames_all" | grep -vxF '_index' || true)"
   [[ -z "$dups" ]] && return 0
-  local bad="" d
+  local bad="" d esc paths other allowed allowed_count
   while IFS= read -r d; do
+    esc="$(printf '%s' "$d" | sed 's/[.[\*^$]/\\&/g')"
+    paths="$(grep -E "(^|/)$esc\$" "$TMP/ambiguity_paths" || true)"
+
+    # Date-named daily logs and remsleep reports intentionally share the same
+    # YYYY-MM-DD basename. They must be linked by path (`logs/daily/...` or
+    # `logs/remsleep/...`), but the pair itself should not fail the vault gate.
+    if [[ "$d" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+      # Daily and remsleep records may be rotated below archive/month
+      # directories. They remain addressable by their explicit path, while
+      # the current-vs-archive pair is intentionally exempt from the bare
+      # basename gate. Other roots with the same basename remain errors.
+      other="$(printf '%s\n' "$paths" | grep -vE "^(logs/daily|logs/remsleep)(/[^/]*)*/$esc\$" || true)"
+      allowed="$(printf '%s\n' "$paths" | grep -E "^(logs/daily|logs/remsleep)(/[^/]*)*/$esc\$" || true)"
+      allowed_count="$(printf '%s\n' "$allowed" | grep -c . || true)"
+      if [[ -z "$other" && "$allowed_count" -ge 2 ]]; then
+        continue
+      fi
+    fi
+
     bad+="ambiguous slug '$d':"$'\n'
-    bad+="$(grep -E "(^|/)$(printf '%s' "$d" | sed 's/[.[\*^$]/\\&/g')\$" "$TMP/paths" | sed 's/^/  /')"$'\n'
+    bad+="$(printf '%s\n' "$paths" | sed 's/^/  /')"$'\n'
   done <<< "$dups"
+  [[ -z "$bad" ]] && return 0
   printf '%s' "$bad"; return 1
 }
 
@@ -244,12 +326,6 @@ check_skill_frontmatter() {
   [[ -z "$bad" ]] || { printf '%s' "$bad"; return 1; }
 }
 
-# brain/ is HTML-only (no markdown pages).
-check_no_brain_markdown() {
-  local m; m="$(find "$VAULT/brain" -name '*.md' -print)"
-  [[ -z "$m" ]] || { printf '%s' "$m"; return 1; }
-}
-
 # Archived tasks must be closed. Status-aware: accepts robin:status (canonical)
 # OR legacy robin:state, flagging any still-active value in the archive.
 check_archived_tasks() {
@@ -280,8 +356,9 @@ check_env_ignored() {
   [[ -z "$bad" ]] || { printf '%s' "$bad"; return 1; }
 }
 
-# out/ contains only HTML pages + image/asset files (no stray .md or other cruft).
-# Images (png/jpg/jpeg/svg/gif/webp) for decks/storyboards are allowed.
+# out/ contains only HTML pages + asset files (no stray .md or other cruft).
+# Images (png/jpg/jpeg/svg/gif/webp), presentations (pptx), and final video
+# artifacts (mp4) are allowed.
 # Gitignored files (e.g. .DS_Store) are OS cruft, never part of the durable
 # vault, and are skipped so they don't fail the gate.
 check_out_html_only() {
@@ -294,6 +371,8 @@ check_out_html_only() {
         ! -name '*.html' ! -name '.gitkeep' \
         ! -iname '*.png' ! -iname '*.jpg' ! -iname '*.jpeg' \
         ! -iname '*.svg' ! -iname '*.gif' ! -iname '*.webp' \
+        ! -iname '*.pptx' \
+        ! -iname '*.mp4' \
         -print)
   [[ -z "$bad" ]] || { printf '%s' "$bad"; return 1; }
 }
@@ -302,23 +381,29 @@ check_out_html_only() {
 # WARN-tier checks (soft signals; reported but do not fail the gate)
 # ════════════════════════════════════════════════════════════════════════════
 
-# Orphan pages: brain pages with no inbound link. Excludes _index pages and
-# hubs/ (entry points are linked-from-nowhere by design).
+# Orphan pages: brain pages with no inbound link. Excludes _index pages, hubs/
+# (entry points are linked-from-nowhere by design), and archive branches.
 check_orphans() {
-  local orphans="" f rel relnoext base
+  local orphans="" f rel relnoext base page_no_root target linked
   # Pre-split path-like targets for the suffix test.
   grep '/' "$TMP/targets" > "$TMP/path_targets" || true
   while IFS= read -r f; do
     rel="${f#"$VAULT"/}"; relnoext="${rel%.html}"; base="${relnoext##*/}"
     [[ "$base" == "_index" ]] && continue
-    case "$relnoext" in brain/hubs/*) continue;; esac
+    case "$relnoext" in brain/hubs/*|*/archive/*) continue;; esac
     # linked by bare slug?
     grep -qxF "$base" "$TMP/targets" && continue
-    # linked by a path-like target (exact or '/suffix')?
-    if grep -qE "(^|/)$(printf '%s' "$relnoext" | sed 's#brain/##;s/[.[\*^$]/\\&/g')\$" "$TMP/path_targets"; then
-      continue
-    fi
-    if grep -qxF "$relnoext" "$TMP/path_targets" 2>/dev/null; then continue; fi
+    # linked by a path-like target (exact or any resolver-style suffix)?
+    page_no_root="${relnoext#brain/}"
+    linked=0
+    while IFS= read -r target; do
+      [[ -z "$target" ]] && continue
+      if [[ "$relnoext" == "$target" || "$relnoext" == */"$target" || "$page_no_root" == "$target" || "$page_no_root" == */"$target" ]]; then
+        linked=1
+        break
+      fi
+    done < "$TMP/path_targets"
+    [[ "$linked" -eq 1 ]] && continue
     orphans+="$relnoext"$'\n'
   done < <(find "$VAULT/brain" -name '*.html' -type f)
   [[ -z "$orphans" ]] && return 0
@@ -326,24 +411,30 @@ check_orphans() {
   return 1
 }
 
-# Index freshness: the search index should be at least as new as the newest
-# brain HTML. A stale index means MCP/UI search returns outdated results.
+# Index freshness: the SQLite main file or its live WAL should be at least as
+# new as the newest indexed brain/out HTML. This is a soft mtime heuristic (the
+# indexer remains rebuildable), but accounting for WAL and out/ avoids reporting
+# healthy live indexes as stale or missing artifact edits entirely.
 check_index_fresh() {
   local db="$VAULT/.robin/index.db"
   [[ -f "$db" ]] || { echo "no index.db at $db (run the indexer)"; return 1; }
-  local db_m newest_m newest_f age
-  db_m="$(stat -f %m "$db" 2>/dev/null || stat -c %Y "$db" 2>/dev/null)"
-  newest_f="$(find "$VAULT/brain" -name '*.html' -type f -exec stat -f '%m %N' {} \; 2>/dev/null \
+  local db_m=0 candidate_m candidate newest_m newest_f age
+  for candidate in "$db" "$db-wal"; do
+    [[ -f "$candidate" ]] || continue
+    candidate_m="$(stat -f %m "$candidate" 2>/dev/null || stat -c %Y "$candidate" 2>/dev/null)"
+    [[ "$candidate_m" -gt "$db_m" ]] && db_m="$candidate_m"
+  done
+  newest_f="$(find "$VAULT/brain" "$VAULT/out" -name '*.html' -type f -exec stat -f '%m %N' {} \; 2>/dev/null \
               | sort -rn | head -1)"
   if [[ -z "$newest_f" ]]; then
-    newest_f="$(find "$VAULT/brain" -name '*.html' -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1)"
+    newest_f="$(find "$VAULT/brain" "$VAULT/out" -name '*.html' -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1)"
   fi
   newest_m="${newest_f%% *}"; newest_m="${newest_m%.*}"
   [[ -z "$newest_m" ]] && return 0
   if [[ "$db_m" -ge "$newest_m" ]]; then return 0; fi
   age=$(( newest_m - db_m ))
-  echo "index.db is stale by ${age}s; newest brain page: ${newest_f#* }"
-  echo "  (rebuild the index so search reflects current brain content)"
+  echo "index sidecar is stale by ${age}s; newest indexed page: ${newest_f#* }"
+  echo "  (rebuild the index so search reflects current brain/out content)"
   return 1
 }
 
@@ -354,19 +445,25 @@ check_no_out_markdown() {
   [[ -z "$m" ]] || { printf '%s' "$m"; return 1; }
 }
 
+check_local_permissions() {
+  node "$ROOT/robin/scripts/harden-local-permissions.mjs" \
+    --check \
+    --root "$ROOT" \
+    --vault "$VAULT"
+}
+
 # ── run ─────────────────────────────────────────────────────────────────────
-echo "Robin doctor — vault: $VAULT (rg=$([[ $HAVE_RG -eq 1 ]] && echo yes || echo no))"
+echo "Robin doctor — vault: $VAULT (rg=$([[ $HAVE_RG -eq 1 ]] && echo yes || echo no), mode=$([[ $REPORT_MODE -eq 1 ]] && echo report || echo strict))"
 echo
 
 # ERROR tier
 check ERROR "no leaked/stale paths"                 check_no_stale_paths
-check ERROR "brain format contract (v0.2)"          check_format_contract
+check ERROR "versioned executable vault contract"  check_executable_contract
 check ERROR "no broken wikilinks"                   check_broken_wikilinks
 check ERROR "no ambiguous slugs"                    check_ambiguous_slugs
 check ERROR "generated ignored, brain tracked"      check_generated_ignored
 check ERROR "MCP config points at a real vault"     check_mcp
 check ERROR "skill frontmatter at byte 0"           check_skill_frontmatter
-check ERROR "brain has no markdown pages"           check_no_brain_markdown
 check ERROR "archived tasks are closed"             check_archived_tasks
 check ERROR "top-level logs exist"                  check_logs_exist
 check ERROR "repo .env files are ignored"           check_env_ignored
@@ -376,8 +473,13 @@ check ERROR "out is html + assets only"             check_out_html_only
 check WARN  "no orphan pages"                        check_orphans
 check WARN  "search index is fresh"                  check_index_fresh
 check WARN  "out has no markdown"                    check_no_out_markdown
+check WARN  "private local filesystem modes"         check_local_permissions
 
 echo
 echo "Summary: $errors error(s), $warns warning(s)."
+if [[ "$REPORT_MODE" -eq 1 ]]; then
+  echo "Gate: REPORT ONLY (findings shown; exit status forced to zero)"
+  exit 0
+fi
 [[ "$errors" -eq 0 ]] && echo "Gate: PASS (warnings do not fail)" || echo "Gate: FAIL"
 exit "$errors"

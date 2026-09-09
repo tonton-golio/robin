@@ -1,0 +1,497 @@
+/* Robin page styles — memory. Owner: memory page. "Quiet Slate" v2.
+   Human review queue over Robin's durable beliefs. Dense review surface: cards
+   and strips separate by surface + soft elevation (a thing gets a border OR a
+   shadow, never both), list lines separate with --hairline, and every
+   micro-label runs through --lab-*. Marked states (hot count, current lineage
+   node, focused card) are --accent-wash + an inset accent spine, never an ink
+   fill. Red is the aging flag + destructive Reject only, as --red-wash with
+   --red text. Everything reuses tokens.css vars + the .r-* primitives; these
+   rules cover the memory-specific vocabulary (count strip, cards, lineage
+   chain, keybar, dialog). */
+
+.mem-page {
+  max-width: 1160px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 26px 28px 96px;
+}
+
+/* ---- page header ---- */
+.mem-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.mem-tagline {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+}
+.mem-head .mem-tagline { margin-left: auto; }
+.mem-title {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 14px 0 18px;
+  color: var(--ink);
+}
+
+/* ---- count strip: one level-2 surface, hairline dividers inside ---- */
+.mem-counts {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset);
+  overflow: hidden;
+  margin-bottom: 26px;
+}
+@media (max-width: 900px) { .mem-counts { grid-template-columns: repeat(3, 1fr); } }
+.mem-count {
+  padding: 14px 14px 12px;
+  border-right: 1px solid var(--hairline);
+  cursor: pointer;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+}
+.mem-count:last-child { border-right: none; }
+@media (max-width: 900px) {
+  .mem-count:nth-child(3n) { border-right: none; }
+  .mem-count:nth-child(n+4) { border-top: 1px solid var(--hairline); }
+}
+.mem-count b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.mem-count span {
+  display: block;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+  margin-top: 4px;
+}
+/* the "hot" bucket is marked with a wash + accent spine, not an inverted fill */
+.mem-count.hot { background: var(--accent-wash); color: var(--ink); box-shadow: inset 2px 0 0 var(--blue); }
+.mem-count.hot span { color: var(--blue); }
+.mem-count.hot .mem-aging-note {
+  color: var(--red);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: var(--meta-size);
+}
+.mem-count.sel { outline: 2px solid var(--blue); outline-offset: -2px; }
+.mem-count:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+/* ---- malformed projection strip (loud enough to notice, quiet enough to
+   live on the page: a warn wash with a warn spine) ---- */
+.mem-malformed {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: color-mix(in srgb, var(--warn) 13%, transparent);
+  color: var(--ink);
+  border-radius: var(--radius);
+  box-shadow: inset 3px 0 0 var(--warn);
+  padding: 9px 14px;
+  margin: 0 0 22px;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  flex-wrap: wrap;
+}
+.mem-malformed .m { font-family: var(--font-mono); font-size: var(--meta-size); letter-spacing: 0; text-transform: none; font-weight: 400; color: var(--muted); }
+.mem-malformed a { color: var(--link); margin-left: auto; white-space: nowrap; }
+
+/* ---- filter bar ---- */
+.mem-filters {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset-sm);
+  padding: 14px 16px;
+  margin-bottom: 22px;
+}
+.mem-frow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mem-frow + .mem-frow { margin-top: 10px; }
+/* inputs keep a real 1px --line border - one of the structural cases */
+.mem-search {
+  flex: 1;
+  min-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 9px 12px;
+}
+.mem-search:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mem-fgroup { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.mem-lbl {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+  margin-right: 2px;
+}
+.mem-fpill {
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.mem-fpill:hover { color: var(--ink); }
+.mem-fpill.on {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.mem-fpill:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mem-fpill .k { font-family: var(--font-mono); font-size: var(--meta-size); text-transform: none; letter-spacing: 0; margin-left: 4px; }
+.mem-result-meta {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+/* ---- queue + cards ---- */
+.mem-queue { display: flex; flex-direction: column; gap: 16px; }
+.mem-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset);
+  padding: 14px 16px 12px;
+  position: relative;
+}
+/* focused card rises to level 3 and takes the accent spine; the visible focus
+   ring stays because keyboard review is the primary interaction here */
+.mem-card.focused {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  box-shadow: var(--offset-lg), inset 2px 0 0 var(--blue);
+}
+.mem-corner { position: absolute; top: 8px; right: 12px; font-size: var(--lab-size); color: var(--muted); }
+.mem-cardhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* memory-specific pill states (settled = muted ghost, aging = red wash, match = dashed) */
+.mem-pill-ghost { border-color: var(--line); color: var(--muted); background: transparent; }
+.mem-pill-aging {
+  background: var(--red-wash);
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.mem-pill-match { border-style: dashed; border-color: var(--line); color: var(--muted); }
+button.r-pill { font-family: inherit; cursor: pointer; -webkit-appearance: none; appearance: none; }
+
+.mem-subject {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-weight: 650;
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+  margin: 8px 0 4px;
+  cursor: pointer;
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.mem-subject:hover { text-decoration: underline; }
+.mem-subject:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mem-summary { font-size: 13px; max-width: 78ch; margin: 0 0 10px; color: var(--ink); }
+
+.mem-prov {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  color: var(--muted);
+  letter-spacing: 0;
+  line-height: 1.7;
+}
+.mem-prov a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.mem-prov a:hover { color: var(--link); }
+
+/* search hits read as a wash - a match must not invert */
+.mem-card mark { background: var(--accent-wash); color: var(--ink); padding: 0 0.15em; border-radius: var(--radius-sm); }
+
+.mem-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 10px;
+}
+.mem-hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  color: var(--muted);
+  align-self: center;
+}
+/* Confirm is a quiet level-1 button off-focus; on the focused card the JSX
+   swaps in .r-btn--primary so the accent marks the one action worth taking. */
+.mem-confirm-quiet { background: var(--card); color: var(--ink); border: none; box-shadow: var(--offset-sm); }
+
+/* small button sizing shared by card actions */
+.mem-btn-sm {
+  font-size: var(--lab-size);
+  padding: 6px 10px;
+  letter-spacing: 0;
+}
+
+/* ---- expanded body ---- */
+.mem-bodyx { border-top: 1px solid var(--hairline); margin-top: 10px; padding-top: 12px; }
+.mem-xsec { margin-bottom: 14px; }
+.mem-xsec:last-child { margin-bottom: 0; }
+.mem-xsec .r-bar { font-size: var(--lab-size); padding: 0; margin-bottom: 8px; }
+.mem-xsec p { font-size: 13px; max-width: 78ch; margin: 0; color: var(--ink); }
+.mem-xsec .mono { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); }
+
+.mem-srcline, .mem-evline, .mem-linkline {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.mem-srcline:last-child, .mem-evline:last-child, .mem-linkline:last-child { border-bottom: none; }
+.mem-srcline .kind {
+  background: var(--accent-wash);
+  color: var(--blue);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-family: var(--font-sans);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  flex: none;
+}
+.mem-srcline a, .mem-linkline a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.mem-srcline a:hover, .mem-linkline a:hover { color: var(--link); }
+.mem-srcline .q { color: var(--muted); font-style: normal; }
+.mem-srcline .at { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mem-evline .et { flex: none; width: 128px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mem-evline .ev { font-weight: 650; flex: none; width: 116px; }
+.mem-evline .ev.resolved { font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.mem-evline .ed { color: var(--muted); }
+.mem-noref { color: var(--muted); }
+.mem-extmark { margin-left: 4px; font-size: var(--meta-size); color: var(--muted); }
+
+/* ---- lineage chain ---- */
+.mem-chain { display: flex; gap: 0; align-items: stretch; flex-wrap: wrap; }
+.mem-node {
+  background: var(--card-2);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--offset-sm);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  letter-spacing: 0;
+  max-width: 260px;
+}
+.mem-node.cur { background: var(--accent-wash); color: var(--ink); box-shadow: var(--offset-sm), inset 2px 0 0 var(--blue); }
+.mem-node .linkbtn {
+  font: inherit;
+  font-family: inherit;
+  background: none;
+  border: none;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.mem-node .linkbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mem-arrow { align-self: center; padding: 0 8px; font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); }
+.mem-node .st {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  margin-bottom: 3px;
+  color: var(--muted);
+}
+.mem-node.cur .st { color: var(--blue); }
+
+/* ---- lineage deep-link view ---- */
+.mem-lineage-view { margin-bottom: 22px; }
+.mem-backlink {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  margin-bottom: 12px;
+  display: inline-block;
+  color: var(--link);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.mem-backlink:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mem-lineage-box { background: var(--card); border-radius: var(--radius); box-shadow: var(--offset); padding: 16px; }
+
+/* ---- states ---- */
+.mem-skeleton { display: flex; flex-direction: column; gap: 16px; }
+.mem-sk { height: 96px; background: var(--card); border-radius: var(--radius); box-shadow: var(--offset-sm); position: relative; overflow: hidden; }
+.mem-sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 6%, transparent), transparent);
+  animation: mem-sweep 1.1s linear infinite;
+}
+@keyframes mem-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.mem-sk .m { position: absolute; bottom: 8px; left: 12px; font-size: var(--meta-size); color: var(--muted); font-family: var(--font-mono); }
+
+.mem-state {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--offset);
+  padding: 34px 30px;
+  max-width: 640px;
+}
+.mem-state h2 { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; margin: 14px 0 10px; }
+.mem-state p { font-size: 13px; max-width: 60ch; color: var(--ink); }
+.mem-state p.mono { font-family: var(--font-mono); color: var(--muted); font-size: var(--meta-size); }
+.mem-state .row { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+.mem-state.error { box-shadow: var(--offset), inset 3px 0 0 var(--red); }
+.mem-state.error .r-bar { background: transparent; color: var(--red); }
+
+/* ---- overlays / dialog (level 3) ---- */
+.mem-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--shadow-ink) 45%, transparent);
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 9vh 20px 20px;
+}
+.mem-sheet {
+  background: var(--card-2);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--offset-lg);
+  width: 100%;
+  max-width: 620px;
+  overflow: hidden;
+}
+.mem-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  color: var(--muted);
+  border-bottom: 1px solid var(--hairline);
+  padding: 10px 14px;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+}
+.mem-sheet-head button { background: none; border: none; color: inherit; font: inherit; cursor: pointer; letter-spacing: var(--lab-track); }
+.mem-sheet-head button:hover { color: var(--ink); }
+.mem-sheet-body { padding: 18px; }
+.mem-sheet label {
+  display: block;
+  font-size: var(--lab-size);
+  font-weight: var(--lab-weight);
+  letter-spacing: var(--lab-track);
+  text-transform: var(--lab-case);
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.mem-sheet label:first-child { margin-top: 0; }
+.mem-sheet label .lc { letter-spacing: 0; text-transform: none; }
+.mem-sheet input[type="text"], .mem-sheet textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 9px 11px;
+  resize: vertical;
+}
+.mem-sheet input:focus, .mem-sheet textarea:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.mem-sheet textarea.invalid { outline: 2px solid var(--red); outline-offset: 2px; }
+.mem-sheet-foot { display: flex; gap: 12px; justify-content: flex-end; padding: 0 18px 18px; }
+.mem-sheet-target { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); }
+.mem-sheet-api { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); padding: 10px 18px; border-top: 1px solid var(--hairline); }
+
+/* ---- toast (level 3) ---- */
+.mem-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 52px;
+  z-index: 70;
+  background: var(--card-2);
+  color: var(--ink);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  padding: 8px 14px;
+  box-shadow: var(--offset-lg);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.mem-toast-undo {
+  background: none;
+  border: none;
+  color: var(--blue);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  padding: 0;
+}

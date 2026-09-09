@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  appBreadcrumbs,
+  isCandidatesRoute,
   isDailyRoute,
+  isDayWorkspaceRoute,
+  isInboxWorkspaceRoute,
+  isLibraryWorkspaceRoute,
   isOutputsRoute,
+  isPublishWorkspaceRoute,
+  isReviewWorkspaceRoute,
   isVaultRoute,
   vaultApiFileHref,
   vaultFileHref,
@@ -11,29 +16,6 @@ import {
 import { normalizeVaultFilePath, normalizeVaultReadPath } from './vault-file';
 
 describe('route helpers', () => {
-  it('maps output storage paths to the outputs overview in breadcrumbs', () => {
-    expect(appBreadcrumbs('/out/reports/weekly-plan')).toEqual([
-      { label: 'outputs', href: '/outputs' },
-      { label: 'reports' },
-      { label: 'weekly plan' },
-    ]);
-  });
-
-  it('maps daily log storage paths without duplicating logs/daily', () => {
-    expect(appBreadcrumbs('/logs/daily/2026-05-29')).toEqual([
-      { label: 'daily', href: '/daily' },
-      { label: '2026 05 29' },
-    ]);
-  });
-
-  it('maps file viewer paths back to their section overview', () => {
-    expect(appBreadcrumbs('/file/out/presentations/demo.pdf')).toEqual([
-      { label: 'outputs', href: '/outputs' },
-      { label: 'presentations' },
-      { label: 'demo.pdf' },
-    ]);
-  });
-
   it('encodes page, file, and API file routes consistently', () => {
     expect(vaultPageHref('out/monthly plan.html')).toBe('/out/monthly%20plan');
     expect(vaultFileHref('out/monthly plan.pdf')).toBe('/file/out/monthly%20plan.pdf');
@@ -45,6 +27,27 @@ describe('route helpers', () => {
     expect(isDailyRoute('/logs/daily/2026-05-29')).toBe(true);
     expect(isVaultRoute('/brain/projects/robin')).toBe(true);
     expect(isVaultRoute('/out/presentations/demo')).toBe(false);
+  });
+
+  it('matches the candidates section on exact and nested paths only', () => {
+    expect(isCandidatesRoute('/candidates')).toBe(true);
+    expect(isCandidatesRoute('/candidates/jordan-lee')).toBe(true);
+    expect(isCandidatesRoute('/candidates-archive')).toBe(false);
+    expect(isCandidatesRoute('/tasks')).toBe(false);
+    expect(isCandidatesRoute('/')).toBe(false);
+  });
+
+  it('exposes workspace route predicates while preserving URL aliases', () => {
+    expect(isDayWorkspaceRoute('/logs/daily/2026-05-29')).toBe(true);
+    expect(isInboxWorkspaceRoute('/file/inbox/meetings/demo.md')).toBe(true);
+    expect(isReviewWorkspaceRoute('/comments')).toBe(true);
+    expect(isLibraryWorkspaceRoute('/p/brain/projects/robin')).toBe(true);
+    expect(isPublishWorkspaceRoute('/p/out/presentations/demo')).toBe(true);
+
+    // Overlaps are intentional and resolved by the precedence contract in
+    // workspaces.ts; bookmarked file routes remain compatible.
+    expect(isVaultRoute('/inbox/meetings/demo')).toBe(true);
+    expect(isLibraryWorkspaceRoute('/inbox/meetings/demo')).toBe(true);
   });
 });
 
@@ -72,5 +75,5 @@ describe('vault path validators', () => {
     expect(normalizeVaultReadPath('inbox/x\0.webm')).toBeNull();
     expect(normalizeVaultReadPath('secrets/x.webm')).toBeNull();
   });
-});
 
+});

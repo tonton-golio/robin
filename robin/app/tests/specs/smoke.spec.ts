@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/robin-test';
 
 /**
  * smoke.spec.ts
@@ -19,19 +19,19 @@ test.describe('smoke', () => {
     await expect(page.getByRole('navigation', { name: /primary/i })).toBeVisible();
   });
 
-  test('file tree is visible on the vault page', async ({ page }) => {
-    await page.goto('/vault');
-    await expect(page.locator('.vault-tree')).toBeVisible();
+  test('file tree is visible in the Library workspace', async ({ page }) => {
+    await page.goto('/library');
+    await expect(page.locator('.r-vault-tree')).toBeVisible();
   });
 
   test('brain section is present in the vault tree', async ({ page }) => {
-    await page.goto('/vault');
+    await page.goto('/library');
     // Directory rows render as role="button" with the folder name.
-    await expect(page.getByRole('button', { name: /^brain$/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('treeitem', { name: /^brain\b/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('out section is present in the vault tree', async ({ page }) => {
-    await page.goto('/vault');
-    await expect(page.getByRole('button', { name: /^out$/i })).toBeVisible({ timeout: 10000 });
+    await page.goto('/library');
+    await expect(page.getByRole('treeitem', { name: /^out\b/i })).toBeVisible({ timeout: 10000 });
   });
 });

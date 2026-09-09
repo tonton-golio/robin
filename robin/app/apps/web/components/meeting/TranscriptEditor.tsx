@@ -25,14 +25,20 @@ import type { Segment } from '@/lib/whisper';
 import { vaultPageHref } from '@/lib/routes';
 import { Button, Input, buttonVariants } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import type {
+  MeetingCommitmentSignal,
+  MeetingConflictSignal,
+  MeetingDecisionSignal,
+  MeetingEvidenceState,
+} from '@/lib/meeting-signals';
 
-export interface EditorActionItem {
-  text: string;
-  owner: string | null;
-}
+export type EditorActionItem = MeetingCommitmentSignal;
+export type EditorDecision = MeetingDecisionSignal;
+export type EditorConflict = MeetingConflictSignal;
 
 interface TranscriptEditorProps {
   transcript: string;
+  meetingId: string;
   segments?: Segment[];
   audioPath?: string;
   durationSec?: number;
@@ -44,6 +50,8 @@ interface TranscriptEditorProps {
   initialSummary?: string;
   initialKeyPoints?: string[];
   initialActionItems?: EditorActionItem[];
+  initialDecisions?: EditorDecision[];
+  initialConflicts?: EditorConflict[];
   /** Map of detected speaker label → inferred name (auto speaker naming). */
   speakerNames?: Record<string, string>;
   onSaved?: (result: { path: string; slug: string; ingestUrl: string }) => void;
@@ -107,7 +115,9 @@ function segmentsToTranscript(segments: Segment[], renames: Record<string, strin
 function composeBody(input: {
   summary: string;
   keyPoints: string[];
+  decisions: EditorDecision[];
   actionItems: EditorActionItem[];
+  conflicts: EditorConflict[];
   transcript: string;
 }): string {
   const sections: string[] = [];
@@ -121,10 +131,24 @@ function composeBody(input: {
     sections.push(`## Key points\n\n${points.map(p => `- ${p}`).join('\n')}`);
   }
 
+  const decisions = input.decisions.filter(decision => decision.text.trim());
+  if (decisions.length) {
+    sections.push(`## Decisions\n\n${decisions.map(decision => `- ${decision.text.trim()}`).join('\n')}`);
+  }
+
   const actions = input.actionItems.filter(a => a.text.trim());
   if (actions.length) {
-    const lines = actions.map(a => `- [ ] ${a.text.trim()}${a.owner?.trim() ? ` — ${a.owner.trim()}` : ''}`);
+    const lines = actions.map(a => {
+      const owner = a.owner?.trim() ? ` — ${a.owner.trim()}` : '';
+      const due = a.due ? ` — due ${a.due}` : '';
+      return `- [ ] ${a.text.trim()}${owner}${due}`;
+    });
     sections.push(`## Action items\n\n${lines.join('\n')}`);
+  }
+
+  const conflicts = input.conflicts.filter(conflict => conflict.question.trim());
+  if (conflicts.length) {
+    sections.push(`## Open questions\n\n${conflicts.map(conflict => `- ${conflict.question.trim()}`).join('\n')}`);
   }
 
   // Only label the transcript when there's a preamble above it; a bare transcript
@@ -136,12 +160,13 @@ function composeBody(input: {
   return input.transcript.trim();
 }
 
-const LABEL = 'text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-2)]';
+const LABEL = 'text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted)]';
 const FIELD =
-  'w-full rounded-md border border-[var(--border-0)] bg-[var(--bg-1)] px-3 py-2 text-sm text-[var(--text-0)] outline-none transition-colors focus:border-[var(--robin-amber)]';
+  'w-full rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition-colors focus:border-[var(--blue)]';
 
 export function TranscriptEditor({
   transcript: initialTranscript,
+  meetingId,
   segments,
   audioPath,
   durationSec,
@@ -151,6 +176,8 @@ export function TranscriptEditor({
   initialSummary = '',
   initialKeyPoints = [],
   initialActionItems = [],
+  initialDecisions = [],
+  initialConflicts = [],
   speakerNames,
   onSaved,
 }: TranscriptEditorProps) {
@@ -172,6 +199,8 @@ export function TranscriptEditor({
   const [summary, setSummary] = useState(initialSummary);
   const [keyPoints, setKeyPoints] = useState<string[]>(initialKeyPoints);
   const [actionItems, setActionItems] = useState<EditorActionItem[]>(initialActionItems);
+  const [decisions, setDecisions] = useState<EditorDecision[]>(initialDecisions);
+  const [conflicts, setConflicts] = useState<EditorConflict[]>(initialConflicts);
 
   // Seed attendees from inferred speaker names when available.
   const [slug, setSlug] = useState(initialSlug);
@@ -188,6 +217,34 @@ export function TranscriptEditor({
   const [ingesting, setIngesting] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<{ text: string; href?: string } | null>(null);
 
+  const runIngest = useCallback(async (url: string) => {
+    setIngesting(true);
+    setIngestMsg(null);
+    try {
+      const res = await fetch(url, { method: 'POST' });
+      const data = (await res.json()) as {
+        message?: string;
+        outputPath?: string;
+        pageUrl?: string;
+        error?: string;
+        compiled?: { decisions?: unknown[]; commitments?: unknown[]; interventions?: unknown[] };
+      };
+      if (!res.ok) {
+        setIngestMsg({ text: data?.error || data?.message || `Compile failed (${res.status})` });
+        return;
+      }
+      const href = data.pageUrl || (data.outputPath ? vaultPageHref(data.outputPath) : undefined);
+      const counts = data.compiled
+        ? `${data.compiled.decisions?.length ?? 0} decisions, ${data.compiled.commitments?.length ?? 0} commitments, ${data.compiled.interventions?.length ?? 0} need you`
+        : 'meeting compiled';
+      setIngestMsg({ text: `Captured · ${counts}`, href });
+    } catch (err) {
+      setIngestMsg({ text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setIngesting(false);
+    }
+  }, []);
+
   const handleRenameChange = useCallback((speaker: string, newName: string) => {
     setRenames(prev => ({ ...prev, [speaker]: newName }));
   }, []);
@@ -201,18 +258,27 @@ export function TranscriptEditor({
     setSaving(true);
     setSaveError(null);
     try {
-      const composedBody = composeBody({ summary, keyPoints, actionItems, transcript: finalTranscript });
+      const composedBody = composeBody({
+        summary,
+        keyPoints,
+        decisions,
+        actionItems,
+        conflicts,
+        transcript: finalTranscript,
+      });
       const res = await fetch('/api/meeting/save-transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transcript: composedBody,
+          meetingId,
           title: title.trim() || undefined,
           summary: summary.trim() || undefined,
           slug: slug.trim() || undefined,
           attendees: attendees.trim() || undefined,
           audioPath,
           durationSec,
+          signals: { decisions, commitments: actionItems, conflicts },
         }),
       });
 
@@ -224,33 +290,18 @@ export function TranscriptEditor({
       setSavedPath(data.path ?? null);
       setIngestUrl(data.ingestUrl ?? null);
       onSaved?.({ path: data.path ?? '', slug: data.slug ?? '', ingestUrl: data.ingestUrl ?? '' });
+      if (data.ingestUrl) await runIngest(data.ingestUrl);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
-  }, [actionItems, attendees, audioPath, durationSec, finalTranscript, keyPoints, onSaved, slug, summary, title]);
+  }, [actionItems, attendees, audioPath, conflicts, decisions, durationSec, finalTranscript, keyPoints, meetingId, onSaved, runIngest, slug, summary, title]);
 
   const handleIngest = useCallback(async () => {
     if (!ingestUrl) return;
-    setIngesting(true);
-    setIngestMsg(null);
-    try {
-      const res = await fetch(ingestUrl, { method: 'POST' });
-      const data = (await res.json()) as { message?: string; outputPath?: string; pageUrl?: string; error?: string };
-      if (!res.ok) {
-        setIngestMsg({ text: data?.error || data?.message || `Ingest failed (${res.status})` });
-        return;
-      }
-      const href = data?.pageUrl
-        || (data?.outputPath ? vaultPageHref(data.outputPath) : undefined);
-      setIngestMsg({ text: href ? `Ingested → open meeting page` : data?.message || 'Ingest complete', href });
-    } catch (err) {
-      setIngestMsg({ text: err instanceof Error ? err.message : String(err) });
-    } finally {
-      setIngesting(false);
-    }
-  }, [ingestUrl]);
+    await runIngest(ingestUrl);
+  }, [ingestUrl, runIngest]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -279,15 +330,30 @@ export function TranscriptEditor({
         </label>
       </div>
 
-      {/* Key points + action items */}
-      <div className="grid gap-5 md:grid-cols-2">
+      {/* Reviewable synthesis */}
+      <div className="grid gap-5">
         <ListEditor
           label="Key points"
           items={keyPoints}
           onChange={setKeyPoints}
           placeholder="Add a key point"
         />
-        <ActionItemEditor items={actionItems} onChange={setActionItems} />
+        <div className="rounded-[var(--radius-lg)] border border-[color-mix(in_srgb,var(--blue)_35%,var(--line))] bg-[color-mix(in_srgb,var(--blue)_5%,var(--card))] p-4">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <span className={LABEL}>Robin&apos;s read</span>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                These are the durable records Robin will carry forward. Reported means someone said it explicitly; inferred stays tentative.
+              </p>
+            </div>
+            <span className="font-mono text-[11px] tracking-[0.06em] text-[var(--blue-deep)]">review before capture</span>
+          </div>
+          <div className="grid gap-5 xl:grid-cols-3">
+            <DecisionEditor items={decisions} onChange={setDecisions} />
+            <ActionItemEditor items={actionItems} onChange={setActionItems} />
+            <ConflictEditor items={conflicts} onChange={setConflicts} />
+          </div>
+        </div>
       </div>
 
       {/* Speaker rename controls */}
@@ -298,10 +364,10 @@ export function TranscriptEditor({
             {speakers.map(speaker => (
               <label
                 key={speaker}
-                className="flex items-center gap-1.5 rounded-md border border-[var(--border-0)] bg-[var(--bg-1)] px-2 py-1 text-sm"
+                className="flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--card)] px-2 py-1 text-sm"
               >
-                <span className="font-mono text-xs text-[var(--text-2)]">{speaker}</span>
-                <span className="text-[var(--text-2)]">→</span>
+                <span className="font-mono text-xs text-[var(--muted)]">{speaker}</span>
+                <span className="text-[var(--muted)]">→</span>
                 <input
                   type="text"
                   value={renames[speaker] ?? speaker}
@@ -351,19 +417,21 @@ export function TranscriptEditor({
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap items-center gap-2.5 border-t border-[var(--border-0)] pt-5">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : savedPath ? 'Re-save' : 'Save transcript'}
+      <div className="flex flex-wrap items-center gap-2.5 border-t border-[var(--hairline)] pt-5">
+        <Button onClick={handleSave} disabled={saving || ingesting || !!savedPath}>
+          {saving ? 'Saving…' : ingesting ? 'Compiling…' : savedPath ? 'Captured' : 'Save & compile'}
         </Button>
 
-        <Button
-          variant="outline"
-          onClick={handleIngest}
-          disabled={!ingestUrl || ingesting}
-          className="border-[var(--status-stable)] bg-[color-mix(in_srgb,var(--status-stable)_18%,transparent)] text-[var(--status-stable)] hover:bg-[color-mix(in_srgb,var(--status-stable)_28%,transparent)] hover:text-[var(--status-stable)]"
-        >
-          {ingesting ? 'Ingesting…' : 'Ingest to brain'}
-        </Button>
+        {savedPath && ingestMsg && !ingestMsg.href && (
+          <Button
+            variant="outline"
+            onClick={handleIngest}
+            disabled={!ingestUrl || ingesting}
+            className="border-[var(--good)] text-[var(--good)]"
+          >
+            {ingesting ? 'Compiling…' : 'Retry compile'}
+          </Button>
+        )}
 
         <Button
           variant="outline"
@@ -383,18 +451,18 @@ export function TranscriptEditor({
           Download
         </a>
 
-        {savedPath && <span className="font-mono text-xs text-[var(--status-stable)]">Saved → {savedPath}</span>}
-        {saveError && <span className="text-xs text-[var(--warning-rust)]">{saveError}</span>}
+        {savedPath && <span className="font-mono text-xs text-[var(--good)]">Saved → {savedPath}</span>}
+        {saveError && <span className="text-xs text-[var(--red)]">{saveError}</span>}
       </div>
 
       {ingestMsg && (
-        <p className="text-xs text-[var(--status-stable)]">
+        <p className="text-xs text-[var(--good)]">
           {ingestMsg.href ? (
             <a
               href={ingestMsg.href}
               target="_blank"
               rel="noreferrer"
-              className="underline underline-offset-2 hover:opacity-80"
+              className="underline underline-offset-2 hover:text-[var(--blue-deep)]"
             >
               {ingestMsg.text}
             </a>
@@ -429,7 +497,7 @@ function ListEditor({
       <div className="flex flex-col gap-1.5">
         {items.map((item, i) => (
           <div key={i} className="flex items-center gap-2">
-            <span className="text-[var(--signal-cyan)]">•</span>
+            <span className="text-[var(--blue)]">•</span>
             <Input
               type="text"
               value={item}
@@ -439,7 +507,7 @@ function ListEditor({
             />
             <button
               onClick={() => remove(i)}
-              className="text-[var(--text-2)] transition-colors hover:text-[var(--warning-rust)]"
+              className="text-[var(--muted)] transition-colors hover:text-[var(--red)]"
               aria-label="Remove"
             >
               ✕
@@ -447,14 +515,78 @@ function ListEditor({
           </div>
         ))}
       </div>
-      <button onClick={add} className="self-start text-xs text-[var(--text-1)] transition-colors hover:text-[var(--robin-amber)]">
+      <button onClick={add} className="self-start text-xs text-[var(--muted)] transition-colors hover:text-[var(--blue)]">
         ＋ Add
       </button>
     </div>
   );
 }
 
-// ── Editable list of action items (text + owner) ───────────────────────────
+function freshSignalId(kind: 'decision' | 'commitment' | 'conflict'): string {
+  return `${kind}-${globalThis.crypto.randomUUID().toLowerCase()}`;
+}
+
+function EvidenceSelect({
+  value,
+  onChange,
+}: {
+  value: MeetingEvidenceState;
+  onChange: (value: MeetingEvidenceState) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={event => onChange(event.target.value as MeetingEvidenceState)}
+      className="h-7 rounded-[var(--radius-sm)] border border-[var(--line-strong)] bg-[var(--card)] px-2 font-mono text-[11px] tracking-[0.06em] text-[var(--muted)] outline-none focus:border-[var(--blue)]"
+      aria-label="Evidence state"
+    >
+      <option value="reported">Reported</option>
+      <option value="inferred">Inferred</option>
+    </select>
+  );
+}
+
+function DecisionEditor({
+  items,
+  onChange,
+}: {
+  items: EditorDecision[];
+  onChange: (items: EditorDecision[]) => void;
+}) {
+  const update = (i: number, patch: Partial<EditorDecision>) =>
+    onChange(items.map((item, index) => index === i ? { ...item, ...patch } : item));
+  const remove = (i: number) => onChange(items.filter((_, index) => index !== i));
+  const add = () => onChange([...items, {
+    id: freshSignalId('decision'),
+    text: '',
+    evidenceState: 'reported',
+  }]);
+
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className={LABEL}>Decisions</span>
+      {items.map((item, i) => (
+        <div key={item.id} className="grid gap-2 rounded-[var(--radius)] border border-[var(--line)] bg-[var(--card-2)] p-2.5">
+          <div className="flex items-start gap-2">
+            <span className="mt-2 text-[var(--blue)]">◆</span>
+            <Input
+              type="text"
+              value={item.text}
+              onChange={event => update(i, { text: event.target.value })}
+              placeholder="Decision"
+              className="h-8 min-w-0 flex-1"
+            />
+            <button onClick={() => remove(i)} className="mt-1 text-[var(--muted)] hover:text-[var(--red)]" aria-label="Remove decision">✕</button>
+          </div>
+          <EvidenceSelect value={item.evidenceState} onChange={value => update(i, { evidenceState: value })} />
+        </div>
+      ))}
+      <button onClick={add} className="self-start text-xs text-[var(--muted)] transition-colors hover:text-[var(--blue)]">＋ Add decision</button>
+    </div>
+  );
+}
+
+// ── Editable commitments (promises, not generic tasks) ────────────────────
 function ActionItemEditor({
   items,
   onChange,
@@ -465,42 +597,94 @@ function ActionItemEditor({
   const update = (i: number, patch: Partial<EditorActionItem>) =>
     onChange(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
-  const add = () => onChange([...items, { text: '', owner: null }]);
+  const add = () => onChange([...items, {
+    id: freshSignalId('commitment'),
+    text: '',
+    owner: null,
+    due: null,
+    evidenceState: 'reported',
+  }]);
 
   return (
-    <div className="flex flex-col gap-2">
-      <span className={LABEL}>Action items</span>
-      <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className={LABEL}>Commitments</span>
+      <div className="flex flex-col gap-2">
         {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-[var(--robin-amber)]">☐</span>
-            <Input
-              type="text"
-              value={item.text}
-              onChange={e => update(i, { text: e.target.value })}
-              placeholder="Follow-up"
-              className="h-8 flex-1"
-            />
-            <Input
-              type="text"
-              value={item.owner ?? ''}
-              onChange={e => update(i, { owner: e.target.value || null })}
-              placeholder="Owner"
-              className="h-8 w-24"
-            />
-            <button
-              onClick={() => remove(i)}
-              className="text-[var(--text-2)] transition-colors hover:text-[var(--warning-rust)]"
-              aria-label="Remove"
-            >
-              ✕
-            </button>
+          <div key={item.id} className="grid gap-2 rounded-[var(--radius)] border border-[var(--line)] bg-[var(--card-2)] p-2.5">
+            <div className="flex items-start gap-2">
+              <span className="mt-2 text-[var(--blue)]">☐</span>
+              <Input
+                type="text"
+                value={item.text}
+                onChange={e => update(i, { text: e.target.value })}
+                placeholder="Promised outcome"
+                className="h-8 min-w-0 flex-1"
+              />
+              <button onClick={() => remove(i)} className="mt-1 text-[var(--muted)] hover:text-[var(--red)]" aria-label="Remove commitment">✕</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="text"
+                value={item.owner ?? ''}
+                onChange={e => update(i, { owner: e.target.value || null })}
+                placeholder="Owner"
+                className="h-8 min-w-0"
+              />
+              <Input
+                type="date"
+                value={item.due ?? ''}
+                onChange={e => update(i, { due: e.target.value || null })}
+                className="h-8 min-w-0"
+                aria-label="Commitment checkpoint"
+              />
+            </div>
+            <EvidenceSelect value={item.evidenceState} onChange={value => update(i, { evidenceState: value })} />
           </div>
         ))}
       </div>
-      <button onClick={add} className="self-start text-xs text-[var(--text-1)] transition-colors hover:text-[var(--robin-amber)]">
-        ＋ Add
+      <button onClick={add} className="self-start text-xs text-[var(--muted)] transition-colors hover:text-[var(--blue)]">
+        ＋ Add commitment
       </button>
+    </div>
+  );
+}
+
+function ConflictEditor({
+  items,
+  onChange,
+}: {
+  items: EditorConflict[];
+  onChange: (items: EditorConflict[]) => void;
+}) {
+  const update = (i: number, patch: Partial<EditorConflict>) =>
+    onChange(items.map((item, index) => index === i ? { ...item, ...patch } : item));
+  const remove = (i: number) => onChange(items.filter((_, index) => index !== i));
+  const add = () => onChange([...items, {
+    id: freshSignalId('conflict'),
+    subject: '',
+    existingValue: '',
+    proposedValue: '',
+    question: '',
+  }]);
+
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className={LABEL}>Needs judgment</span>
+      {items.map((item, i) => (
+        <div key={item.id} className="grid gap-2 rounded-[var(--radius)] border border-[color-mix(in_srgb,var(--red)_35%,var(--line))] bg-[var(--card-2)] p-2.5">
+          <div className="flex items-start gap-2">
+            <span className="mt-2 text-[var(--red)]">!</span>
+            <Input value={item.subject} onChange={event => update(i, { subject: event.target.value })} placeholder="Subject" className="h-8 min-w-0 flex-1" />
+            <button onClick={() => remove(i)} className="mt-1 text-[var(--muted)] hover:text-[var(--red)]" aria-label="Remove judgment item">✕</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={item.existingValue} onChange={event => update(i, { existingValue: event.target.value })} placeholder="Current" className="h-8 min-w-0" />
+            <Input value={item.proposedValue} onChange={event => update(i, { proposedValue: event.target.value })} placeholder="Meeting says" className="h-8 min-w-0" />
+          </div>
+          <Input value={item.question} onChange={event => update(i, { question: event.target.value })} placeholder="What should Robin ask you?" className="h-8 min-w-0" />
+        </div>
+      ))}
+      <button onClick={add} className="self-start text-xs text-[var(--muted)] transition-colors hover:text-[var(--blue)]">＋ Add judgment</button>
     </div>
   );
 }

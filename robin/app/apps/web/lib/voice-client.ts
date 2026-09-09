@@ -10,7 +10,11 @@
 //   - Cancel local playback the instant the user starts speaking — the
 //     server already sends `response.cancel` upstream, but in-flight audio
 //     deltas would otherwise keep playing for ~1s after barge-in.
+//   - Record the user's microphone track locally with MediaRecorder so the
+//     answer audio can be durably uploaded when the session ends.
 //   - Surface transcript text and connection state to the UI.
+
+import { bestMimeType } from "./audio-utils";
 
 export type VoiceState =
   | "idle"
@@ -31,6 +35,12 @@ export type TranscriptEntry = {
   text: string;
   partial: boolean;
   startedAt: number;
+};
+
+export type VoiceRecording = {
+  blob: Blob;
+  mimeType: string;
+  durationSec: number;
 };
 
 export type VoiceClientEvents = {
@@ -96,6 +106,9 @@ export class VoiceClient {
   private ctx: AudioContext | null = null;
   private worklet: AudioWorkletNode | null = null;
   private mediaStream: MediaStream | null = null;
+  private mediaRecorder: MediaRecorder | null = null;
+  private recordingChunks: Blob[] = [];
+  private recordingStartedAt: number | null = null;
   private analyser: AnalyserNode | null = null;
   private playbackTime = 0;
   private activeSources = new Set<AudioBufferSourceNode>();
@@ -235,23 +248,28 @@ export class VoiceClient {
     void this.teardown();
   }
 
-  async stop(): Promise<void> {
+  async stop(): Promise<VoiceRecording | null> {
     this.stopped = true;
     const wasErrored = this.errored;
-    await this.teardown();
+    const recording = await this.teardown();
     // Only announce a clean end when we didn't already surface an error — this
     // is the race fix: previously stop() always emitted "ended", clobbering a
     // just-fired "error" from the start() failure path.
     if (!wasErrored) this.events.onState("ended");
+    return recording;
   }
 
   /** Release all audio + socket resources. Does not emit a terminal state. */
-  private async teardown(): Promise<void> {
+  private async teardown(): Promise<VoiceRecording | null> {
     this.live = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    // Stop MediaRecorder before stopping the source track so Chromium can emit
+    // the final WebM/Opus chunk. Recording failure must never prevent the mic,
+    // AudioContext, or sockets from being released.
+    const recording = await this.finishRecording().catch(() => null);
     try {
       this.cancelPlayback();
       this.worklet?.disconnect();
@@ -277,6 +295,7 @@ export class VoiceClient {
     } catch {
       /* best-effort teardown */
     }
+    return recording;
   }
 
   getTranscript(): TranscriptEntry[] {
@@ -309,6 +328,28 @@ export class VoiceClient {
       await ctx.close().catch(() => {});
       return;
     }
+
+    if (typeof MediaRecorder === "undefined") {
+      mediaStream.getTracks().forEach((t) => t.stop());
+      await ctx.close().catch(() => {});
+      throw new Error("This browser does not support local answer recording.");
+    }
+
+    // MediaRecorder captures only the user's microphone stream. The AI's
+    // playback is deliberately excluded: the durable transcript contains both
+    // sides, while the audio artifact contains the user's answers only.
+    const mimeType = bestMimeType();
+    const mediaRecorder = new MediaRecorder(mediaStream, {
+      ...(mimeType ? { mimeType } : {}),
+      audioBitsPerSecond: 96_000,
+    });
+    this.mediaRecorder = mediaRecorder;
+    this.recordingChunks = [];
+    this.recordingStartedAt = Date.now();
+    mediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size > 0) this.recordingChunks.push(event.data);
+    });
+    mediaRecorder.start(1000);
 
     const source = ctx.createMediaStreamSource(mediaStream);
     this.worklet = new AudioWorkletNode(ctx, "pcm-recorder", {
@@ -352,6 +393,34 @@ export class VoiceClient {
     this.events.onAnalyser?.(this.analyser);
 
     if (ctx.state === "suspended") await ctx.resume();
+  }
+
+  private async finishRecording(): Promise<VoiceRecording | null> {
+    const recorder = this.mediaRecorder;
+    if (!recorder) return null;
+
+    const durationSec = this.recordingStartedAt
+      ? Math.max(0, (Date.now() - this.recordingStartedAt) / 1000)
+      : 0;
+
+    if (recorder.state !== "inactive") {
+      await new Promise<void>((resolve) => {
+        recorder.addEventListener("stop", () => resolve(), { once: true });
+        try {
+          recorder.stop();
+        } catch {
+          resolve();
+        }
+      });
+    }
+
+    const mimeType = recorder.mimeType || bestMimeType() || "audio/webm";
+    const blob = new Blob(this.recordingChunks, { type: mimeType });
+    this.mediaRecorder = null;
+    this.recordingChunks = [];
+    this.recordingStartedAt = null;
+
+    return blob.size > 0 ? { blob, mimeType, durationSec } : null;
   }
 
   private handleServerEvent(data: string | ArrayBuffer): void {

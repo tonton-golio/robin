@@ -1,0 +1,191 @@
+/* Robin page styles — file tree, document reader, and annotations. */
+
+/* ============================ SHELL ============================ */
+.r-vault-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ============================ TREE ============================ */
+.r-vault-tree {
+  border-right: 1px solid var(--line);   /* structural rail edge */
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+.r-vault-tree-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; border-bottom: 1px solid var(--hairline); }
+.r-vault-tree-head .r-bar { flex: none; }
+.r-vault-tree-filter { padding: 8px 12px; border-bottom: 1px solid var(--hairline); }
+.r-vault-tree-filter input {
+  width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--card); color: var(--ink);
+  font-family: var(--font-mono); font-size: var(--meta-size); padding: 6px 8px; outline: none;
+}
+.r-vault-tree-filter input:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.r-vault-tree-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.r-vault-tnode {
+  display: flex; align-items: center; gap: 6px; padding: 5px 12px 5px 8px; cursor: pointer;
+  font-size: 12px; color: var(--ink); text-decoration: none; border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  width: 100%; text-align: left; background: none; font-family: inherit;
+}
+.r-vault-tnode:hover { background: var(--card); }
+/* active node: accent wash + inset spine (was an outlined/raised brick) */
+.r-vault-tnode[data-active="true"] { background: var(--accent-wash); border-color: transparent; box-shadow: inset 2px 0 0 var(--blue); position: relative; z-index: 1; }
+.r-vault-tnode[data-focus="true"]:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.r-vault-tnode[data-cur="true"] { font-weight: 650; }
+.r-vault-tw { width: 12px; flex: none; font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); text-align: center; }
+.r-vault-tglyph { width: 13px; flex: none; font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); }
+.r-vault-tl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.r-vault-tcount { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; }
+.r-vault-tree-foot { border-top: 1px solid var(--hairline); padding: 6px 12px; font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; flex: none; }
+.r-vault-tree-msg { color: var(--muted); font-size: 12px; padding: 10px 12px; }
+.r-vault-tree-msg button { background: none; border: none; padding: 0; color: var(--link); font: inherit; text-decoration: underline; cursor: pointer; }
+
+/* ============================ DOCUMENT ============================ */
+.r-vault-body { min-width: 0; min-height: 0; height: 100%; overflow-y: auto; }
+
+.r-vault-doc-grid {
+  display: block;
+  min-height: 100%;
+  height: auto;
+}
+/* ---------- document column ---------- */
+.r-vault-doc {
+  width: min(100%, 900px);
+  min-width: 0;
+  margin: 0 auto;
+  overflow: visible;
+  padding: 28px clamp(20px, 4vw, 56px) 120px;
+}
+.r-vault-kicker { font-size: var(--lab-size); font-weight: var(--lab-weight); letter-spacing: var(--lab-track); text-transform: var(--lab-case); color: var(--muted); display: block; margin-bottom: 8px; }
+/* document title - plain ink, sentence/title case as authored. Never a hero fill. */
+.r-vault-title { font-size: 26px; letter-spacing: -0.02em; line-height: 1.25; margin: 2px 0 6px; max-width: 34ch; font-weight: 650; color: var(--ink); }
+.r-vault-summary { font-size: 14px; color: var(--muted); max-width: 68ch; margin: 0 0 8px; }
+/* ---------- ONE PageMetaBar band - level-1 surface ---------- */
+.r-vault-metaband {
+  display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+  border: none; border-radius: var(--radius); background: var(--card); box-shadow: var(--offset-sm);
+  padding: 10px 12px; margin: 0 0 20px;
+  font-family: var(--font-mono); font-size: var(--meta-size); letter-spacing: 0; color: var(--muted);
+}
+.r-vault-field { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.r-vault-field .val { color: var(--ink); }
+.r-vault-field a { color: var(--link); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--link) 45%, transparent); }
+.r-vault-field a:hover { border-bottom-color: var(--link); }
+.r-vault-metaband .sep { width: 1px; align-self: stretch; background: var(--hairline); }
+.r-vault-tags { display: inline-flex; gap: 5px; flex-wrap: wrap; }
+.r-vault-tag { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px 0; color: var(--ink); }
+.r-vault-statusselect {
+  font-family: var(--font-mono); font-size: var(--lab-size); font-weight: var(--lab-weight); letter-spacing: var(--lab-track); text-transform: var(--lab-case);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--ink); padding: 3px 6px 2px; cursor: pointer;
+}
+.r-vault-statusselect:disabled { opacity: 0.6; cursor: progress; }
+
+/* ---------- CAS write-conflict banner - red wash marked by a red spine ---------- */
+.r-vault-conflict { border: none; border-radius: var(--radius); background: var(--red-wash); box-shadow: inset 3px 0 0 var(--red); padding: 12px 14px; margin: 0 0 20px; }
+.r-vault-conflict .warnpill { background: transparent; color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 45%, transparent); border-radius: 999px; font-size: var(--lab-size); font-weight: 600; letter-spacing: var(--lab-track); text-transform: var(--lab-case); padding: 3px 9px 2px; display: inline-block; }
+.r-vault-conflict .ct { font-weight: 650; font-size: 14px; margin: 8px 0 4px; }
+.r-vault-conflict p { font-size: 12.5px; max-width: 62ch; margin: 6px 0; }
+.r-vault-conflict .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; font-family: var(--font-mono); font-size: var(--meta-size); }
+@media (max-width: 620px) { .r-vault-conflict .diff { grid-template-columns: 1fr; } }
+.r-vault-conflict .side { border: none; border-radius: var(--radius-sm); background: var(--card); box-shadow: var(--offset-sm); padding: 8px 10px; }
+/* Robin's side of the diff is marked with an inset accent spine */
+.r-vault-conflict .side.robin { box-shadow: var(--offset-sm), inset 3px 0 0 var(--blue); }
+.r-vault-conflict .side .who { font-family: var(--font-sans); font-size: var(--lab-size); font-weight: var(--lab-weight); letter-spacing: var(--lab-track); text-transform: var(--lab-case); color: var(--muted); margin-bottom: 4px; }
+.r-vault-conflict .side b { color: var(--ink); }
+.r-vault-conflict .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.r-vault-conflict .m { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; margin-top: 6px; }
+
+/* ---------- end-of-page ---------- */
+.r-vault-endnote { color: var(--muted); font-size: 12.5px; margin-top: 26px; font-family: var(--font-mono); }
+.r-vault-endnote a { color: var(--link); }
+
+/* ============================ LANDING ============================ */
+.r-vault-landing { overflow-y: auto; height: 100%; padding: 40px clamp(20px, 5vw, 64px) 120px; }
+.r-vault-landing .kicker { font-size: var(--lab-size); font-weight: var(--lab-weight); letter-spacing: var(--lab-track); text-transform: var(--lab-case); color: var(--muted); }
+.r-vault-stepped { font-size: clamp(30px, 4vw, 52px); margin-top: 12px; }
+.r-vault-provstrip {
+  margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--hairline);
+  font-family: var(--font-mono); font-size: var(--meta-size); letter-spacing: 0; color: var(--muted);
+  display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline;
+}
+.r-vault-provstrip b { color: var(--ink); }
+.r-vault-recent { margin-top: 40px; max-width: 62ch; }
+.r-vault-recent h2 { font-family: var(--font-sans); font-size: var(--lab-size); font-weight: var(--lab-weight); color: var(--muted); letter-spacing: var(--lab-track); text-transform: var(--lab-case); margin: 0 0 12px; }
+.r-vault-recent a { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--hairline); text-decoration: none; color: var(--ink); font-size: 14px; }
+.r-vault-recent a:hover { color: var(--blue); }
+.r-vault-recent .meta { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; }
+
+/* ============================ STATE BOXES ============================ */
+/* non-structural placeholder frame - separator weight, not a structural rule */
+.r-vault-statebox { border: 1px dashed var(--hairline); border-radius: var(--radius); padding: 16px 18px; margin: 16px 0; max-width: 62ch; }
+.r-vault-statebox.warn { border-style: solid; border-color: color-mix(in srgb, var(--red) 35%, transparent); background: var(--red-wash); }
+.r-vault-statebox .st { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
+.r-vault-statebox p { font-size: 12.5px; max-width: 58ch; margin: 6px 0; }
+.r-vault-statebox .m { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; margin-top: 8px; }
+.r-vault-statebox .warnpill { background: transparent; color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 45%, transparent); border-radius: 999px; font-size: var(--lab-size); font-weight: 600; letter-spacing: var(--lab-track); text-transform: var(--lab-case); padding: 3px 9px 2px; display: inline-block; margin-bottom: 8px; }
+.r-vault-statebox .actions { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* loading skeleton */
+.r-vault-skel .sk { background: var(--ink); opacity: 0.1; height: 12px; border-radius: var(--radius-sm); margin-top: 10px; animation: rvPulse 1.2s ease-in-out infinite; }
+@keyframes rvPulse { 0%, 100% { opacity: 0.08; } 50% { opacity: 0.18; } }
+@media (prefers-reduced-motion: reduce) { .r-vault-skel .sk { animation: none; } }
+
+/* ============================ ANNOTATIONS ============================ */
+/* accent dotted anchors (a marked element); resolved = muted solid */
+.robin-prose mark.robin-highlight {
+  background: transparent; border-bottom: 2px dotted var(--blue); color: inherit; cursor: pointer; padding: 0 0.05em;
+}
+.robin-prose mark.robin-highlight[data-status="resolved"] { border-bottom-style: solid; border-bottom-color: var(--muted); }
+.robin-prose mark.robin-highlight:hover { background: var(--accent-wash); }
+
+/* annotation dialog - real role=dialog: reposition, edge-flip, focus.
+   Level-3 surface: raised, no outline. */
+.r-anno-dialog {
+  position: fixed; z-index: 60; width: min(360px, 92vw);
+  background: var(--card-2); border: none; border-radius: var(--radius-lg); box-shadow: var(--offset-lg);
+}
+.r-anno-dialog .ahead { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--hairline); padding: 8px 10px; }
+.r-anno-dialog .aclose { margin-left: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--ink); font-family: var(--font-mono); font-size: 12px; line-height: 1; padding: 3px 7px; cursor: pointer; }
+.r-anno-dialog .aclose:hover { background: var(--accent-wash); color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.r-anno-body { max-height: 46vh; overflow-y: auto; padding: 10px 12px; }
+.r-anno-body .quote { font-size: var(--meta-size); color: var(--muted); border-left: 2px solid var(--hairline); padding-left: 8px; margin-bottom: 10px; }
+.r-anno-reply { border-top: 1px solid var(--hairline); padding: 8px 0; }
+.r-anno-reply:first-child { border-top: none; }
+.r-anno-reply .who { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; display: flex; gap: 8px; align-items: baseline; }
+.r-anno-reply .who .actor { font-weight: 650; color: var(--ink); }
+.r-anno-reply .txt { font-size: 12.5px; margin-top: 3px; }
+.r-anno-foot { border-top: 1px solid var(--hairline); padding: 10px 12px; }
+.r-anno-foot textarea { width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); color: var(--ink); font: inherit; font-size: 12.5px; padding: 7px 8px; resize: vertical; min-height: 44px; outline: none; }
+.r-anno-foot textarea:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.r-anno-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.r-anno-state { border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--ink); font-family: var(--font-mono); font-size: var(--lab-size); font-weight: 600; letter-spacing: var(--lab-track); text-transform: var(--lab-case); padding: 3px 8px 2px; cursor: pointer; }
+.r-anno-state:hover { background: var(--accent-wash); color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.r-anno-state.reject:hover { background: var(--red-wash); border-color: color-mix(in srgb, var(--red) 45%, transparent); color: var(--red); }
+.r-anno-foot .m { font-family: var(--font-mono); font-size: var(--meta-size); color: var(--muted); letter-spacing: 0; margin-top: 8px; }
+
+/* selection toolbar - level-3 surface */
+.r-anno-toolbar { position: absolute; z-index: 55; display: flex; align-items: center; gap: 4px; border: none; border-radius: var(--radius); background: var(--card-2); padding: 4px; box-shadow: var(--offset-lg); }
+.r-anno-tool-btn { display: inline-flex; align-items: center; gap: 5px; border: none; border-radius: var(--radius-sm); background: none; color: var(--ink); font: inherit; font-size: var(--lab-size); padding: 4px 8px; cursor: pointer; }
+.r-anno-tool-btn:hover { background: var(--accent-wash); color: var(--blue); }
+
+/* unanchored-notes tray - level-3 surface */
+.r-anno-tray { position: fixed; right: 16px; bottom: 60px; z-index: 40; width: min(300px, 86vw); background: var(--card-2); border: none; border-radius: var(--radius-lg); box-shadow: var(--offset-lg); }
+.r-anno-tray-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--hairline); font-family: var(--font-mono); font-size: var(--lab-size); font-weight: var(--lab-weight); text-transform: var(--lab-case); letter-spacing: var(--lab-track); color: var(--muted); }
+.r-anno-tray-body { max-height: 40vh; overflow-y: auto; padding: 4px 0; }
+.r-anno-tray-item { padding: 7px 10px; border-top: 1px solid var(--hairline); font-size: 12px; }
+.r-anno-tray-item:first-child { border-top: none; }
+.r-anno-tray-item .q { color: var(--muted); font-family: var(--font-mono); font-size: var(--meta-size); letter-spacing: 0; }
+
+/* Library navigation must not consume the full scroll viewport. */
+.r-library { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.r-library-views { flex: none; display: flex; gap: 20px; padding: 20px clamp(20px, 5vw, 64px); border-bottom: 1px solid var(--hairline); }
+.r-library > .r-vault-landing { flex: 1; min-height: 0; height: auto; }
+.r-library .r-vault-recent { max-width: 80ch; }
+.r-library .r-vault-recent > section { margin-bottom: 24px; }
+.r-library .r-vault-recent > section > p { margin: 8px 0; }

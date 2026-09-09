@@ -4,6 +4,13 @@ import { locateVault } from './vault';
 
 const ALLOWED_ROOTS = new Set(['brain', 'inbox', 'out', 'logs']);
 
+// Durable binary media (brand masters, logo files, poster PDFs) that pages
+// reference but that cannot live in `brain/` because that tree is HTML-only.
+// Deliberately NOT in ALLOWED_ROOTS: the write paths (page save/create/move)
+// share that set, and `assets/` must never become a destination for authored
+// pages. Only the serve/read paths widen to include it.
+const MEDIA_ROOTS = new Set(['assets']);
+
 // Deny-list of vault-relative paths that must never be served over the network,
 // even though they live under an allowed root. These mirror the categories the
 // vault marks as sensitive/gitignored (raw HR contracts, raw meeting/audio
@@ -50,7 +57,10 @@ const TEXT_EXTENSIONS = new Set([
  * Still enforces: NUL rejection, `..`/absolute-path rejection, and the
  * ALLOWED_ROOTS allowlist. Returns the normalized POSIX path, or null on reject.
  */
-function normalizeContainedVaultPath(input: string | string[]): string | null {
+function normalizeContainedVaultPath(
+  input: string | string[],
+  { allowMedia = false }: { allowMedia?: boolean } = {},
+): string | null {
   const joined = Array.isArray(input) ? input.join('/') : input;
   if (!joined.trim() || joined.includes('\0')) return null;
 
@@ -65,7 +75,8 @@ function normalizeContainedVaultPath(input: string | string[]): string | null {
   }
 
   const root = normalized.split('/')[0];
-  if (!root || !ALLOWED_ROOTS.has(root)) return null;
+  if (!root) return null;
+  if (!ALLOWED_ROOTS.has(root) && !(allowMedia && MEDIA_ROOTS.has(root))) return null;
 
   return normalized;
 }
@@ -89,7 +100,22 @@ export function normalizeVaultFilePath(input: string | string[]): string | null 
  * at read time.
  */
 export function normalizeVaultReadPath(input: string | string[]): string | null {
-  return normalizeContainedVaultPath(input);
+  return normalizeContainedVaultPath(input, { allowMedia: true });
+}
+
+/**
+ * Serve-oriented sibling of normalizeVaultFilePath: same traversal + NUL guards
+ * and the same sensitive deny-list, but also permits MEDIA_ROOTS so a brain page
+ * can <img> the brand masters under `assets/`. Use this ONLY where the app hands
+ * bytes to a client (the /api/file route, the /file viewer). Never for writes —
+ * normalizeVaultFilePath stays narrow so `assets/` cannot receive authored pages.
+ */
+export function normalizeVaultServePath(input: string | string[]): string | null {
+  const normalized = normalizeContainedVaultPath(input, { allowMedia: true });
+  if (normalized === null) return null;
+  if (isSensitiveVaultPath(normalized)) return null;
+
+  return normalized;
 }
 
 export function absoluteVaultFilePath(relPath: string): string {
@@ -148,6 +174,17 @@ export function contentTypeForPath(relPath: string): string {
     case '.jpg':
     case '.jpeg':
       return 'image/jpeg';
+    // The brand masters under assets/brand/logos/svg are SVG. Without this case
+    // they fell through to application/octet-stream, and because this route sets
+    // `x-content-type-options: nosniff`, every <img> pointing at a vault logo was
+    // refused by the browser. Inline scripts inside a served SVG stay blocked by
+    // the route's `script-src 'self'` CSP.
+    case '.svg':
+      return 'image/svg+xml';
+    case '.webp':
+      return 'image/webp';
+    case '.gif':
+      return 'image/gif';
     case '.mp4':
       return 'video/mp4';
     case '.m4v':

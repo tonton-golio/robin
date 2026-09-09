@@ -5,35 +5,39 @@
  * Each write is independent; errors are collected per-item, not thrown.
  */
 
-import { z } from 'zod/v4';
-import { pageWrite } from './page-write.js';
-import type { ToolContext, PageWriteManyOutput, WriteResult } from '../types.js';
+import { z } from "zod/v4";
+import { pageWrite } from "./page-write.js";
+import type { ToolContext, PageWriteManyOutput, WriteResult } from "../types.js";
 
 const WriteOpSchema = z.object({
   ref: z.string().min(1),
   frontmatter: z.record(z.string(), z.unknown()).optional(),
   body_md: z.string().optional(),
+  expected_hash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/i)
+    .optional(),
 });
 
 export const PageWriteManyInputSchema = z.object({
-  writes: z.array(WriteOpSchema).min(1).describe('Array of write operations'),
+  writes: z.array(WriteOpSchema).min(1).describe("Array of write operations"),
 });
 
 export type PageWriteManyInput = z.infer<typeof PageWriteManyInputSchema>;
 
 export async function pageWriteMany(
   input: PageWriteManyInput,
-  ctx: ToolContext
+  ctx: ToolContext,
 ): Promise<PageWriteManyOutput> {
   const results: WriteResult[] = [];
 
   for (const op of input.writes) {
     try {
       const out = await pageWrite(op as Parameters<typeof pageWrite>[0], ctx);
-      results.push({ path: out.path, slug: out.slug, status: 'ok' });
+      results.push({ path: out.path, slug: out.slug, status: "ok" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      results.push({ path: op.ref, slug: '', status: 'error', error: msg });
+      results.push({ path: op.ref, slug: "", status: "error", error: msg });
     }
   }
 

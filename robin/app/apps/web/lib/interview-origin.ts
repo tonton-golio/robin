@@ -4,22 +4,26 @@
  * The relay is a raw `ws` server, so it must enforce its own Origin check
  * (browsers attach Origin to WS handshakes; a same-origin app page will send
  * the app's own origin). We allow localhost / 127.0.0.1 on any port (the dev
- * and prod web servers, plus the relay's own port) and anything listed in
- * INTERVIEW_ALLOWED_ORIGINS (comma-separated) for non-local deployments.
+ * and prod web servers, plus the relay's own port) and anything explicitly
+ * configured for an authenticated remote deployment.
  *
  * Requests with NO Origin header (e.g. non-browser clients) are rejected — a
  * legitimate browser session always carries one.
  */
 
+import { configuredRemoteOrigin } from "./runtime-security";
+
 function parseExtraOrigins(env: NodeJS.ProcessEnv): Set<string> {
   const raw = env["INTERVIEW_ALLOWED_ORIGINS"]?.trim();
-  if (!raw) return new Set();
-  return new Set(
-    raw
-      .split(",")
-      .map((o) => o.trim().replace(/\/$/, ""))
-      .filter(Boolean),
-  );
+  const configured = raw
+    ? raw
+        .split(",")
+        .map((o) => o.trim().replace(/\/$/, ""))
+        .filter(Boolean)
+    : [];
+  const publicOrigin = configuredRemoteOrigin(env);
+  if (publicOrigin) configured.push(publicOrigin);
+  return new Set(configured);
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);

@@ -1,11 +1,21 @@
 import type { Metadata } from 'next';
 import '@/styles/globals.css';
-import { AppShell } from '@/components/shell/AppShell';
+import { LivingWorkspaceShell } from '@/components/shell/LivingWorkspaceShell';
 
 export const metadata: Metadata = {
   title: 'Robin',
   description: 'Your local second brain.',
 };
+
+/**
+ * Runs before first paint to avoid a light/dark flash: read the saved theme
+ * (localStorage 'robin-theme') and stamp `data-theme` on <html> so tokens.css
+ * resolves the right palette immediately. Quiet Slate is dark-first, so with
+ * no stored preference we default to 'dark' rather than reading
+ * prefers-color-scheme; a stored preference always wins.
+ * Kept tiny + defensive (private-mode localStorage can throw).
+ */
+const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem('robin-theme');if(t!=='light'&&t!=='dark'){t='dark';}document.documentElement.dataset.theme=t;}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -13,17 +23,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:wght@500;600&display=swap"
-          rel="stylesheet"
-        />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
       <body>
-        <AppShell>{children}</AppShell>
+        <LivingWorkspaceShell>{children}</LivingWorkspaceShell>
       </body>
     </html>
   );

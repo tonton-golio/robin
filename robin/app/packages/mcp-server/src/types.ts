@@ -5,8 +5,8 @@
  * The actual Zod schemas live in each tool file.
  */
 
-import type { RobinBlock, RobinMeta } from '@robin/converter';
-import type { SearchHit } from '@robin/indexer';
+import type { RobinBlock, RobinMeta } from "@robin/converter";
+import type { SearchHit } from "@robin/indexer";
 
 // Re-export for consumers
 export type { RobinBlock, RobinMeta, SearchHit };
@@ -20,6 +20,8 @@ export interface PageReadInput {
 export interface PageReadOutput {
   path: string;
   slug: string;
+  /** SHA-256 of the exact canonical file bytes; pass to page.write.expected_hash. */
+  content_hash: string;
   meta: RobinMeta;
   frontmatter: unknown;
   blocks: unknown;
@@ -34,6 +36,7 @@ export interface PageWriteInput {
   ref: string;
   frontmatter?: Record<string, unknown>;
   body_md?: string;
+  expected_hash?: string;
 }
 
 export interface PageWriteOutput {
@@ -48,6 +51,7 @@ export interface WriteOp {
   ref: string;
   frontmatter?: Record<string, unknown>;
   body_md?: string;
+  expected_hash?: string;
 }
 
 export interface PageWriteManyInput {
@@ -57,7 +61,7 @@ export interface PageWriteManyInput {
 export interface WriteResult {
   path: string;
   slug: string;
-  status: 'ok' | 'error';
+  status: "ok" | "error";
   error?: string;
 }
 
@@ -117,7 +121,7 @@ export interface PageSearchInput {
 
 export interface PageSearchOutput {
   hits: SearchHit[];
-  mode: 'rrf' | 'fallback';
+  mode: "rrf" | "fallback";
 }
 
 // ── page.list ──────────────────────────────────────────────────────────────
@@ -161,7 +165,7 @@ export interface LinkAddOutput {
 
 export interface LinkListInput {
   ref: string;
-  direction?: 'in' | 'out' | 'both';
+  direction?: "in" | "out" | "both";
 }
 
 export interface LinkEntry {
@@ -178,7 +182,7 @@ export interface LinkListOutput {
 // ── log.append ─────────────────────────────────────────────────────────────
 
 export interface LogAppendInput {
-  file: 'changelog' | 'ingest';
+  file: "changelog" | "ingest";
   entry_md: string;
 }
 
@@ -207,13 +211,13 @@ export interface TaskCreateOutput {
 
 // ── vault.lint ─────────────────────────────────────────────────────────────
 
-export type LintCheck = 'frontmatter' | 'links' | 'orphans' | 'staleness';
+export type LintCheck = "frontmatter" | "links" | "orphans" | "staleness";
 
 export interface LintIssue {
   path: string;
   slug?: string;
   check: LintCheck;
-  severity: 'error' | 'warning';
+  severity: "error" | "warning";
   message: string;
 }
 
@@ -249,13 +253,15 @@ export interface IndexerHandle {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any;
   search(query: string, opts?: Record<string, unknown>): Promise<SearchHit[]>;
-  /**
-   * Force a full vault rescan into the index. Writes do not incrementally
-   * update the index, so this is how a caller refreshes search/backlinks/
-   * resolution after page.write/create/move/delete. Mirrors the web
-   * /api/resync indexer path (indexer.scan()).
-   */
+  /** Force a full reconciliation scan; normal writes refresh changed paths. */
   scan(): Promise<ScanResult>;
+  /** Incrementally refresh written/moved/deleted vault-relative paths. */
+  refresh(paths: string[]): Promise<{
+    indexed: number;
+    removed: number;
+    skipped: number;
+    errors: Array<{ path: string; error: string }>;
+  }>;
   close(): void;
 }
 

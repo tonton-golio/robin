@@ -10,16 +10,18 @@
  * Next.js App Router exposes multipart uploads through request.formData().
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import { createWriteStream } from 'fs';
-import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
-import path from 'path';
-import { vaultPath } from '@/lib/vault';
+import { NextRequest, NextResponse } from "next/server";
+import fs from "fs/promises";
+import { createWriteStream } from "fs";
+import crypto from "node:crypto";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
+import path from "path";
+import { vaultPath } from "@/lib/vault";
+import { fsyncDirectory } from "@robin/vault-io";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Hard ceiling on a single uploaded recording. The recorder caps its own
 // in-memory audio buffer at ~400 MB (≈6.5h of opus@128kbps); a little headroom
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // the common runaway case (clients reliably send Content-Length); a chunked body
   // without Content-Length still gets buffered by formData() and is only caught by
   // the post-parse size check below.
-  const contentLength = Number(request.headers.get('content-length'));
+  const contentLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BYTES) {
     return NextResponse.json(
       {
@@ -49,28 +51,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     formData = await request.formData();
   } catch (err) {
     return NextResponse.json(
-      { error: 'Failed to parse multipart form', detail: String(err) },
+      { error: "Failed to parse multipart form", detail: String(err) },
       { status: 400 },
     );
   }
 
-  const audioEntry = formData.get('audio');
-  const durationRaw = formData.get('durationSec');
+  const audioEntry = formData.get("audio");
+  const durationRaw = formData.get("durationSec");
   const durationSec = durationRaw ? parseFloat(String(durationRaw)) : null;
 
   if (!audioEntry || !(audioEntry instanceof Blob)) {
     return NextResponse.json(
-      { error: 'Missing `audio` file field in multipart form' },
+      { error: "Missing `audio` file field in multipart form" },
       { status: 400 },
     );
   }
 
   // If the blob is empty, treat it as a missing file (curl -F audio=@/dev/null)
   if (audioEntry.size === 0) {
-    return NextResponse.json(
-      { error: 'Uploaded audio file is empty (0 bytes)' },
-      { status: 422 },
-    );
+    return NextResponse.json({ error: "Uploaded audio file is empty (0 bytes)" }, { status: 422 });
   }
 
   // Post-parse size guard: catches a chunked/no-Content-Length body that slipped
@@ -87,28 +86,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Build destination path
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = `${ts}.webm`;
-  const audioDir = vaultPath('inbox', 'meetings', 'audio');
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `${ts}-${crypto.randomUUID().slice(0, 8)}.webm`;
+  const audioDir = vaultPath("inbox", "meetings", "audio");
   const absPath = path.join(audioDir, filename);
-  const relPath = path.join('inbox', 'meetings', 'audio', filename);
+  const temporaryPath = `${absPath}.partial`;
+  const relPath = path.join("inbox", "meetings", "audio", filename);
 
   // Ensure directory exists
   await fs.mkdir(audioDir, { recursive: true });
 
-  // Stream the blob straight to disk instead of materializing the whole payload
-  // as one Buffer — memory stays flat regardless of recording length. If the
-  // write fails partway, remove the partial file so we never leave a truncated,
-  // undecodable recording behind.
+  // Stream to a create-exclusive staging name, fsync it, then publish the final
+  // name with an atomic create-only hard link. A crash or duplicate request can
+  // never expose/overwrite a truncated final recording.
   try {
     await pipeline(
       Readable.fromWeb(audioEntry.stream() as Parameters<typeof Readable.fromWeb>[0]),
-      createWriteStream(absPath),
+      createWriteStream(temporaryPath, { flags: "wx", mode: 0o600 }),
     );
+    const handle = await fs.open(temporaryPath, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.link(temporaryPath, absPath);
+    await fs.unlink(temporaryPath);
+    await fsyncDirectory(audioDir);
   } catch (err) {
-    await fs.rm(absPath, { force: true }).catch(() => {});
+    await fs.rm(temporaryPath, { force: true }).catch(() => {});
     return NextResponse.json(
-      { error: 'Failed to write uploaded audio', detail: String(err) },
+      { error: "Failed to write uploaded audio", detail: String(err) },
       { status: 500 },
     );
   }

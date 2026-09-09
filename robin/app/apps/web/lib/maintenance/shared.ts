@@ -28,7 +28,36 @@ export const DEFAULT_LIMIT = 50;
 export const STALE_OPEN_TASK_DAYS = 30;
 export const OUTPUT_ARCHIVE_DAYS = 30;
 export const LARGE_OUTPUT_BYTES = 5 * 1024 * 1024;
-export const DONE_TASK_STATES = new Set(['done', 'completed', 'archived', 'cancelled', 'canceled']);
+export const DONE_TASK_STATES = new Set([
+  'done',
+  'completed',
+  'archived',
+  'cancelled',
+  'canceled',
+  // Terminal lifecycle states used on real task pages. Omitting these made the
+  // scanner treat superseded/dropped tasks as OPEN and flag them for missing
+  // owner/priority — ~10 false integrity issues on the live vault.
+  'superseded',
+  'dropped',
+]);
+
+// Open the index db in a strictly read-only mode for the monitoring page.
+//
+// The @robin/indexer openDb() runs schema migrations that can DROP + rebuild
+// derived tables on a SCHEMA_VERSION bump — unacceptable side effects for a
+// read-only health dashboard. This bypasses the indexer entirely and requires
+// better-sqlite3 directly (the same driver the indexer uses) with readonly +
+// fileMustExist, and loads NO pragmas, NO DDL, and NO extensions. The
+// maintenance queries only touch pages / wikilinks / links / meta — none of
+// them need the sqlite-vec extension.
+export function openReadOnlyDb(dbPath: string): SqliteDb {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Database = require('better-sqlite3') as new (
+    filename: string,
+    options?: { readonly?: boolean; fileMustExist?: boolean }
+  ) => SqliteDb;
+  return new Database(dbPath, { readonly: true, fileMustExist: true });
+}
 
 export async function readJsonlDir(relDir: string): Promise<JsonlReadResult> {
   const vault = locateVault();

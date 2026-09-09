@@ -1,38 +1,73 @@
-import matter from 'gray-matter';
-import { unified } from 'unified';
-import remarkParse from 'remark-parse';
-import remarkGfm from 'remark-gfm';
-import type { Root } from 'mdast';
-import { remarkWikilink } from './wikilink.js';
-import { mdastToBlocks } from './mdast-to-blocks.js';
-import { blocksToBodyHtml } from './blocks-to-html.js';
-import { normalizeFrontmatter, metaTagsForHead, slugify } from './meta.js';
-import type { ConvertOptions, ConvertResult, RobinBlock, RobinMeta } from './types.js';
+import matter from "gray-matter";
+import type { Root } from "mdast";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { blocksToBodyHtml } from "./blocks-to-html.js";
+import { mdastToBlocks } from "./mdast-to-blocks.js";
+import { metaTagsForHead, normalizeFrontmatter } from "./meta.js";
+import type { ConvertOptions, ConvertResult, RobinBlock, RobinMeta } from "./types.js";
+import { remarkWikilink } from "./wikilink.js";
 
-export * from './types.js';
-export { slugify, normalizeDate } from './meta.js';
+export { normalizeDate, slugify } from "./meta.js";
+export * from "./types.js";
 
 // ── Public rendering & canonicalization API ──────────────────────────────────
 // These are the single source of truth for turning RobinBlock[] + meta into
 // the canonical <!doctype html> documents that Robin stores on disk.
 // The web app (and future tools) must import from here, not re-implement.
 
-export { blocksToBodyHtml } from './blocks-to-html.js';
-export { canonicalizeHtml, type CanonicalizeOptions } from './canonicalize.js';
+export { blocksToBodyHtml } from "./blocks-to-html.js";
+export { type CanonicalizeOptions, canonicalizeHtml } from "./canonicalize.js";
+export {
+  appendHeadMetaTags,
+  readHeadMetaValues,
+  readHeadRobinMetaMap,
+  removeHeadMetaTags,
+  removeHeadScriptTagsById,
+  upsertHeadMetaTag,
+} from "./html-meta.js";
+// HTML → RobinBlock[] (the structural inverse of blocksToBodyHtml) — the WYSIWYG
+// editor's load path. Round-trip stable with blocksToBodyHtml.
+export { htmlBodyToBlocks, htmlToBlocks } from "./html-to-blocks.js";
 // Frontmatter → RobinMeta normalizer, exported so tools (MCP server) can build
 // canonical pages via canonicalizeHtml without re-implementing meta derivation.
-export { normalizeFrontmatter, type NormalizeArgs } from './meta.js';
-
+// Shared canonical-meta vocabulary + extra-tag collector, so the web write path
+// and MCP server preserve non-vocabulary robin:* tags via one implementation.
+export {
+  CANONICAL_META_NAMES,
+  collectExtraMetaTags,
+  DROPPED_META_NAMES,
+  frontmatterFromMeta,
+  type NormalizeArgs,
+  normalizeFrontmatter,
+  ROBIN_SOURCE_KINDS,
+} from "./meta.js";
+export {
+  type ExecutableContract,
+  executablePageRoots,
+  isExecutablePagePath,
+} from "./migration-scope.js";
+export {
+  type MigrationResult,
+  migrateV01ToV02,
+} from "./migrations/v0.1-to-v0.2.js";
+export {
+  inferSourceKind,
+  type MigrateV02ToV03Options,
+  migrateV02ToV03,
+} from "./migrations/v0.2-to-v0.3.js";
 // ── Canonical READ side ──────────────────────────────────────────────────────
 // The single source of truth for parsing a Robin HTML page's <head> meta into a
 // RobinMeta and for the shared HTML parse core. Web/indexer/MCP import these
 // instead of maintaining their own near-identical copies (the source of the
 // robin:status-vs-state and dropped-`size` drift).
 export {
+  assertRobinMigrationCandidate,
   extractMetaFromMap,
   parseRobinHtmlCore,
   type RobinParseCore,
-} from './parse.js';
+} from "./parse.js";
 
 /**
  * Convert markdown to a Robin HTML document.
@@ -53,16 +88,16 @@ export function convertMarkdown(markdown: string, options: ConvertOptions): Conv
   const slug = pathToSlug(options.outputPath);
 
   // 3. Parse markdown body
-  const processor = unified()
-    .use(remarkParse)
-    .use(remarkGfm)
-    .use(remarkWikilink);
+  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkWikilink);
   const tree = processor.parse(content) as Root;
   processor.runSync(tree);
 
   // 4. Derive title (first h1, then frontmatter, then slug)
   const title =
-    options.title ?? findFirstHeadingText(tree) ?? (rawFrontmatter.title as string | undefined) ?? slug;
+    options.title ??
+    findFirstHeadingText(tree) ??
+    (rawFrontmatter.title as string | undefined) ??
+    slug;
 
   // 5. Normalize frontmatter into RobinMeta
   const { raw, meta } = normalizeFrontmatter({
@@ -84,13 +119,13 @@ export function convertMarkdown(markdown: string, options: ConvertOptions): Conv
 }
 
 function pathToSlug(outputPath: string): string {
-  const base = outputPath.split('/').pop() ?? outputPath;
-  return base.replace(/\.html$/i, '');
+  const base = outputPath.split("/").pop() ?? outputPath;
+  return base.replace(/\.html$/i, "");
 }
 
 function findFirstHeadingText(tree: Root): string | undefined {
   for (const node of tree.children) {
-    if (node.type === 'heading' && node.depth === 1) {
+    if (node.type === "heading" && node.depth === 1) {
       return extractText(node.children as Array<{ type: string; value?: string }>);
     }
   }
@@ -98,9 +133,9 @@ function findFirstHeadingText(tree: Root): string | undefined {
 }
 
 function extractText(nodes: Array<{ type: string; value?: string; children?: unknown[] }>): string {
-  let out = '';
+  let out = "";
   for (const n of nodes) {
-    if (n.type === 'text' && typeof n.value === 'string') out += n.value;
+    if (n.type === "text" && typeof n.value === "string") out += n.value;
     else if (n.children) out += extractText(n.children as Array<{ type: string; value?: string }>);
   }
   return out.trim();
@@ -126,8 +161,10 @@ function assembleDocument(args: AssembleArgs): string {
   const { title, meta, bodyHtml } = args;
   const tags = metaTagsForHead(meta);
   const metaLines = tags
-    .map(([name, content]) => `  <meta name="${escapeAttr(name)}" content="${escapeAttr(content)}">`)
-    .join('\n');
+    .map(
+      ([name, content]) => `  <meta name="${escapeAttr(name)}" content="${escapeAttr(content)}">`,
+    )
+    .join("\n");
 
   return (
     `<!doctype html>\n` +
@@ -140,7 +177,7 @@ function assembleDocument(args: AssembleArgs): string {
     `</head>\n` +
     `<body>\n` +
     `  <article data-robin-doc>\n` +
-    `${bodyHtml ? indentLines(bodyHtml, 4) + '\n' : ''}` +
+    `${bodyHtml ? `${indentLines(bodyHtml, 4)}\n` : ""}` +
     `  </article>\n` +
     `</body>\n` +
     `</html>\n`
@@ -156,7 +193,7 @@ export function stableJsonStringify(value: unknown): string {
 }
 
 function replacer(_key: string, value: unknown): unknown {
-  if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+  if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
     const sorted: Record<string, unknown> = {};
     for (const k of Object.keys(value as Record<string, unknown>).sort()) {
       sorted[k] = (value as Record<string, unknown>)[k];
@@ -168,28 +205,32 @@ function replacer(_key: string, value: unknown): unknown {
 }
 
 function escapeText(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function escapeAttr(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // Keep every <meta> tag on one physical line: a newline/CR/tab embedded in
-    // meta content (e.g. a multi-line summary) would otherwise split the tag
-    // across lines and confuse the line-oriented migration regexes. Matches the
-    // canonicalize.ts copy of escapeAttr.
-    .replace(/\r/g, '&#13;')
-    .replace(/\n/g, '&#10;')
-    .replace(/\t/g, '&#9;');
+  return (
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      // Keep every <meta> tag on one physical line: a newline/CR/tab embedded in
+      // meta content (e.g. a multi-line summary) would otherwise split the tag
+      // across lines and confuse the line-oriented migration regexes. Matches the
+      // canonicalize.ts copy of escapeAttr.
+      .replace(/\r/g, "&#13;")
+      .replace(/\n/g, "&#10;")
+      .replace(/\t/g, "&#9;")
+  );
 }
 
 function indentLines(text: string, spaces: number): string {
-  const pad = ' '.repeat(spaces);
-  return text.split('\n').map((l) => (l.length > 0 ? pad + l : l)).join('\n');
+  const pad = " ".repeat(spaces);
+  return text
+    .split("\n")
+    .map((l) => (l.length > 0 ? pad + l : l))
+    .join("\n");
 }
+
+export { TASK_STATUSES, TASK_PRIORITIES, TASK_KINDS, TASK_PATCH_FIELDS, normalizeTaskPatch, applyTaskPatch, type TaskPatch, type TaskPatchField } from "./task-policy.js";

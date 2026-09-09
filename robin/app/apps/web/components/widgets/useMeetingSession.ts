@@ -10,7 +10,11 @@
 
 import { useCallback, useState } from "react";
 import type { LiveRecordingResult, LiveStatus } from "@/components/meeting/LiveRecorder";
-import type { EditorActionItem } from "@/components/meeting/TranscriptEditor";
+import type {
+  EditorActionItem,
+  EditorConflict,
+  EditorDecision,
+} from "@/components/meeting/TranscriptEditor";
 
 export type PageStatus = "idle" | "recording" | "review";
 export type ReviewStage = "choose" | "processing" | "editing";
@@ -19,10 +23,13 @@ export interface ProcessResult {
   title: string;
   summary: string;
   keyPoints: string[];
+  decisions: EditorDecision[];
   actionItems: EditorActionItem[];
+  conflicts: EditorConflict[];
   speakers: Record<string, string>;
   cleanedTranscript: string;
   model?: string;
+  warning?: string;
 }
 
 export interface MeetingSession {

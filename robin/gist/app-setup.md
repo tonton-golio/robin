@@ -76,7 +76,7 @@ The keys in `.env.example`, and what to set:
 cd robin/app
 npm install            # installs all workspaces
 # build just the packages you need (fast, no env required):
-npm run build --workspace=@robin/mcp-server --workspace=@robin/indexer --workspace=@robin/converter
+npm run build --workspace=@robin/converter --workspace=@robin/vault-io --workspace=@robin/memory --workspace=@robin/indexer --workspace=@robin/mcp-server
 ```
 
 The MCP server compiles to `robin/app/packages/mcp-server/dist/cli.js` — that path is what `.mcp.json` points at, so building is required before the MCP works.

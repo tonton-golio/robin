@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeInterviewSlug } from "@/lib/build-system-prompt";
+import { guardApiRequest } from "@/lib/api-request-guard";
 import { getInterviewRuntimeConfig } from "@/lib/xai-relay";
 import { mintSessionToken } from "@/lib/interview-session-token";
 
@@ -21,6 +22,9 @@ import { mintSessionToken } from "@/lib/interview-session-token";
  * spawning. See lib/interview-session-token.ts.
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  const denied = guardApiRequest(req);
+  if (denied) return denied;
+
   const { searchParams } = new URL(req.url);
   const brief = safeInterviewSlug(searchParams.get("brief"));
   const config = getInterviewRuntimeConfig();

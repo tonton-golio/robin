@@ -160,7 +160,7 @@ function CalendarEventRow({
       </span>
       <button
         onClick={handleApply}
-        className="text-xs text-[var(--robin-amber)] hover:text-[var(--signal-cyan)] text-left leading-snug underline-offset-2 hover:underline"
+        className="text-[11px] text-[var(--link)] hover:text-[var(--blue-deep)] text-left leading-snug underline-offset-2 hover:underline"
         title={`Use: ${event.title}`}
       >
         {event.title}

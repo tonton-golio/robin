@@ -70,7 +70,6 @@ These five tags must be present on every page:
 | `robin:status` | `open` \| `in-progress` \| `done` \| `blocked` \| `dropped` \| `superseded` \| `cancelled`. **Use `status`, not `state`.** |
 | `robin:priority` | `p0` \| `p1` \| `p2` \| `p3`. |
 | `robin:due` | ISO-8601 date. E.g., `2026-06-15`. |
-| `robin:workflow` | `inbox` \| `next` \| `active` \| `waiting` \| `review` \| `scheduled` \| `backlog`. |
 | `robin:project` | Project slug. |
 | `robin:category` | Optional. Free-form. |
 
@@ -79,7 +78,7 @@ These five tags must be present on every page:
 | Tag | Notes |
 |---|---|
 | `robin:role` | Free-form. |
-| `robin:relationship` | `direct-report` \| `stakeholder` \| `external` \| `candidate`. |
+| `robin:relationship` | Lowercase kebab classification such as `direct-report`, `stakeholder`, `strategic-partner`, or `hiring-partner`. |
 | `robin:started` | ISO-8601 date. |
 
 ### Meetings, briefs, reports
@@ -101,9 +100,11 @@ These five tags must be present on every page:
 The full enum for `robin:type`:
 
 ```
-task | person | project | knowledge | understanding | reference | tool | repo |
-decision | meeting | interview | brief | report | remsleep | reflection |
-index | template | skill | playbook | work-log | note | hub | standard | pattern
+annotation | artifact | brief | candidate | commitment | compile-receipt |
+decision | feature | hub | index | intervention | interview | knowledge |
+meeting | note | pattern | person | playbook | project | presentation |
+reflection | reflection-questions | remsleep | repo | report | reference |
+skill | standard | storyboard | task | template | tool | understanding | work-log
 ```
 
 If you find yourself wanting a type not on this list, prefer composing (`type: knowledge`, `tag: <your-domain>`) over inventing a new type. Add to the enum only when an entirely new category emerges.

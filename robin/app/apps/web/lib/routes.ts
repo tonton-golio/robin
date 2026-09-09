@@ -1,34 +1,12 @@
-export interface BreadcrumbSegment {
-  label: string;
-  href?: string;
-}
-
-interface VaultRootMeta {
-  label: string;
-  overviewHref: string;
-}
-
-const VAULT_ROOTS: Record<string, VaultRootMeta> = {
-  brain: { label: 'brain', overviewHref: '/vault' },
-  inbox: { label: 'vault', overviewHref: '/vault' },
-  logs: { label: 'daily', overviewHref: '/daily' },
-  out: { label: 'outputs', overviewHref: '/outputs' },
+const VAULT_ROOT_LABELS: Record<string, string> = {
+  brain: 'brain',
+  inbox: 'vault',
+  logs: 'daily',
+  out: 'outputs',
 };
 
 function normalizePathValue(value: string): string {
   return value.replace(/^\/+/, '').replace(/\/+$/, '');
-}
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function prettify(value: string): string {
-  return safeDecode(value).replace(/[-_]+/g, ' ');
 }
 
 export function stripHtmlExtension(pathValue: string): string {
@@ -59,56 +37,7 @@ export function vaultApiFileHref(relPath: string): string {
 }
 
 export function vaultRootLabel(root: string): string {
-  return VAULT_ROOTS[root]?.label ?? prettify(root);
-}
-
-export function vaultRootOverviewHref(root: string): string | undefined {
-  return VAULT_ROOTS[root]?.overviewHref;
-}
-
-function vaultTailForDisplay(root: string, tail: string[]): string[] {
-  if (root === 'logs' && tail[0] === 'daily') return tail.slice(1);
-  return tail;
-}
-
-function vaultBreadcrumbs(parts: string[]): BreadcrumbSegment[] {
-  if (parts.length === 0) return [];
-
-  const root = parts[0];
-  if (!root) return [];
-  const tail = parts.slice(1);
-  const rootMeta = VAULT_ROOTS[root];
-  const crumbs: BreadcrumbSegment[] = [
-    rootMeta ? { label: rootMeta.label, href: rootMeta.overviewHref } : { label: prettify(root) },
-  ];
-
-  for (const part of vaultTailForDisplay(root, tail)) {
-    crumbs.push({ label: prettify(part) });
-  }
-
-  return crumbs;
-}
-
-export function appBreadcrumbs(pathname: string): BreadcrumbSegment[] {
-  if (pathname === '/') return [{ label: 'today', href: '/' }];
-
-  const parts = normalizePathValue(pathname).split('/').filter(Boolean);
-  if (parts.length === 0) return [];
-
-  const first = parts[0];
-  if (!first) return [];
-
-  if (first === 'p') return vaultBreadcrumbs(parts.slice(1));
-  if (first === 'file') return vaultBreadcrumbs(parts.slice(1));
-  if (VAULT_ROOTS[first]) return vaultBreadcrumbs(parts);
-
-  const crumbs: BreadcrumbSegment[] = [];
-  let href = '';
-  for (const part of parts) {
-    href += `/${part}`;
-    crumbs.push({ label: prettify(part), href });
-  }
-  return crumbs;
+  return VAULT_ROOT_LABELS[root] ?? root.replace(/[-_]+/g, ' ');
 }
 
 export function isDailyRoute(pathname: string): boolean {
@@ -127,5 +56,127 @@ export function isVaultRoute(pathname: string): boolean {
     pathname === '/inbox' ||
     pathname.startsWith('/inbox/') ||
     pathname.startsWith('/p/')
+  );
+}
+
+/** Tasks home + the legacy standup board alias. */
+export function isTasksRoute(pathname: string): boolean {
+  return (
+    pathname === '/tasks' ||
+    pathname.startsWith('/tasks/') ||
+    pathname === '/standup' ||
+    pathname.startsWith('/standup/')
+  );
+}
+
+/** Hiring pipeline tracker. */
+export function isCandidatesRoute(pathname: string): boolean {
+  return pathname === '/candidates' || pathname.startsWith('/candidates/');
+}
+
+export function isMemoryRoute(pathname: string): boolean {
+  return pathname === '/memory' || pathname.startsWith('/memory/');
+}
+
+export function isSearchRoute(pathname: string): boolean {
+  return pathname === '/search' || pathname.startsWith('/search/');
+}
+
+/** Live capture (meeting + interview) surface. */
+export function isCaptureRoute(pathname: string): boolean {
+  return pathname === '/capture' || pathname.startsWith('/capture/');
+}
+
+/** Activity feed — folds in the legacy edits + comments routes. */
+export function isActivityRoute(pathname: string): boolean {
+  return (
+    pathname === '/activity' ||
+    pathname.startsWith('/activity/') ||
+    pathname === '/edits' ||
+    pathname.startsWith('/edits/') ||
+    pathname === '/comments' ||
+    pathname.startsWith('/comments/')
+  );
+}
+
+/** System health — folds in the legacy maintenance route. */
+export function isHealthRoute(pathname: string): boolean {
+  return (
+    pathname === '/health' ||
+    pathname.startsWith('/health/') ||
+    pathname === '/maintenance' ||
+    pathname.startsWith('/maintenance/')
+  );
+}
+
+/**
+ * Living Workspace route predicates.
+ *
+ * Some compatibility reader paths match more than one workspace predicate;
+ * `lib/workspaces.ts` owns the documented first-match precedence that resolves
+ * those overlaps.
+ */
+export function isReviewWorkspaceRoute(pathname: string): boolean {
+  return (
+    pathname === '/review' ||
+    pathname.startsWith('/review/') ||
+    pathname === '/comments' ||
+    pathname.startsWith('/comments/')
+  );
+}
+
+export function isInboxWorkspaceRoute(pathname: string): boolean {
+  return (
+    pathname === '/inbox' ||
+    pathname.startsWith('/inbox/') ||
+    isCaptureRoute(pathname) ||
+    pathname === '/file/inbox' ||
+    pathname.startsWith('/file/inbox/') ||
+    pathname === '/p/inbox' ||
+    pathname.startsWith('/p/inbox/')
+  );
+}
+
+export function isPublishWorkspaceRoute(pathname: string): boolean {
+  return (
+    pathname === '/publish' ||
+    pathname.startsWith('/publish/') ||
+    isOutputsRoute(pathname) ||
+    pathname === '/file/out' ||
+    pathname.startsWith('/file/out/') ||
+    pathname === '/p/out' ||
+    pathname.startsWith('/p/out/')
+  );
+}
+
+export function isDayWorkspaceRoute(pathname: string): boolean {
+  return (
+    pathname === '/' ||
+    isTasksRoute(pathname) ||
+    isCandidatesRoute(pathname) ||
+    isDailyRoute(pathname) ||
+    isActivityRoute(pathname) ||
+    isHealthRoute(pathname) ||
+    pathname === '/file/logs' ||
+    pathname.startsWith('/file/logs/') ||
+    pathname === '/p/logs' ||
+    pathname.startsWith('/p/logs/') ||
+    pathname === '/about' ||
+    pathname.startsWith('/about/') ||
+    pathname === '/new' ||
+    pathname.startsWith('/new/')
+  );
+}
+
+export function isLibraryWorkspaceRoute(pathname: string): boolean {
+  return (
+    pathname === '/library' ||
+    pathname.startsWith('/library/') ||
+    isVaultRoute(pathname) ||
+    isMemoryRoute(pathname) ||
+    isSearchRoute(pathname) ||
+    pathname === '/brain' ||
+    pathname === '/file' ||
+    pathname.startsWith('/file/')
   );
 }

@@ -49,6 +49,50 @@ describe('task.create — canonical status', () => {
     expect(m['robin:type']).toBe('task');
   });
 
+  it('normalizes start, end, and due date metadata', async () => {
+    const ctx = makeCtx(vault);
+    const res = await taskCreate({
+      title: 'Schedule the thing',
+      due: '2026-06-30',
+      start: '2026-06-12',
+      end: '2026-06-20',
+    }, ctx);
+
+    const html = fs.readFileSync(path.join(vault, res.path), 'utf8');
+    const m = parseRobinHtml(html).meta as Record<string, string | string[]>;
+    expect(m['robin:due']).toBe('2026-06-30T00:00:00Z');
+    expect(m['robin:start']).toBe('2026-06-12T00:00:00Z');
+    expect(m['robin:end']).toBe('2026-06-20T00:00:00Z');
+  });
+
+  it('persists shared project, next action, acceptance, and hierarchy fields', async () => {
+    const ctx = makeCtx(vault);
+    const res = await taskCreate({
+      title: 'Plan the launch',
+      project: 'robin',
+      next_action: 'Draft the launch note',
+      acceptance: 'The launch note is reviewed',
+      kind: 'workstream',
+      parent: 'launch-outcome',
+      priority: 'P1',
+    }, ctx);
+
+    const m = parseRobinHtml(fs.readFileSync(path.join(vault, res.path), 'utf8')).meta as Record<string, string | string[]>;
+    expect(m['robin:project']).toBe('robin');
+    expect(m['robin:next_action']).toBe('Draft the launch note');
+    expect(m['robin:acceptance']).toBe('The launch note is reviewed');
+    expect(m['robin:kind']).toBe('workstream');
+    expect(m['robin:parent']).toBe('launch-outcome');
+    expect(m['robin:priority']).toBe('p1');
+  });
+
+  it('rejects invalid create fields before creating a page', async () => {
+    const ctx = makeCtx(vault);
+    await expect(taskCreate({ title: 'Invalid priority', priority: 'p9' }, ctx))
+      .rejects.toThrow(/invalid task priority/);
+    expect(fs.existsSync(path.join(vault, 'brain', 'tasks', 'invalid-priority.html'))).toBe(false);
+  });
+
   it('writes the canonical changelog convention', async () => {
     const ctx = makeCtx(vault);
     const res = await taskCreate({ title: 'Ship the thing', summary: 'A summary' }, ctx);
@@ -89,18 +133,124 @@ describe('task.update', () => {
     expect(changelog).toMatch(/task \| Updated \[\[do-work\]\] \(status → done, priority → p1\) — shipped/);
   });
 
+  it('updates and clears schedule dates without touching the body', async () => {
+    const ctx = makeCtx(vault);
+    await taskCreate({
+      title: 'Windowed work',
+      due: '2026-06-21',
+      start: '2026-06-10',
+      end: '2026-06-14',
+      body_md: '# Windowed work\n\nKeep this body intact.',
+    }, ctx);
+
+    await taskUpdate({
+      ref: 'brain/tasks/windowed-work.html',
+      due: '2026-06-30',
+      start: '2026-06-12',
+      end: '2026-06-20',
+    }, ctx);
+
+    const updatedHtml = fs.readFileSync(path.join(vault, 'brain', 'tasks', 'windowed-work.html'), 'utf8');
+    const updatedParsed = parseRobinHtml(updatedHtml);
+    const updatedMeta = updatedParsed.meta as Record<string, string | string[]>;
+    expect(updatedMeta['robin:due']).toBe('2026-06-30T00:00:00Z');
+    expect(updatedMeta['robin:start']).toBe('2026-06-12T00:00:00Z');
+    expect(updatedMeta['robin:end']).toBe('2026-06-20T00:00:00Z');
+    expect(updatedParsed.bodyText).toContain('Keep this body intact.');
+
+    await taskUpdate({
+      ref: 'brain/tasks/windowed-work.html',
+      due: '',
+      start: '',
+      end: '',
+    }, ctx);
+
+    const clearedHtml = fs.readFileSync(path.join(vault, 'brain', 'tasks', 'windowed-work.html'), 'utf8');
+    const clearedParsed = parseRobinHtml(clearedHtml);
+    const clearedMeta = clearedParsed.meta as Record<string, string | string[]>;
+    expect(clearedMeta['robin:due']).toBeUndefined();
+    expect(clearedMeta['robin:start']).toBeUndefined();
+    expect(clearedMeta['robin:end']).toBeUndefined();
+    expect(clearedParsed.bodyText).toContain('Keep this body intact.');
+
+    const changelog = fs.readFileSync(path.join(vault, 'logs', 'changelog.md'), 'utf8');
+    expect(changelog).toMatch(/task \| Updated \[\[windowed-work\]\] \(due → 2026-06-30, start → 2026-06-12, end → 2026-06-20\)/);
+    expect(changelog).toMatch(/task \| Updated \[\[windowed-work\]\] \(due cleared, start cleared, end cleared\)/);
+  });
+
   it('rejects a no-op update', async () => {
     const ctx = makeCtx(vault);
     await taskCreate({ title: 'Empty update' }, ctx);
     await expect(
       taskUpdate({ ref: 'brain/tasks/empty-update.html' }, ctx)
-    ).rejects.toThrow(/at least one of/);
+    ).rejects.toThrow(/at least one task field/);
   });
 
-  it('preserves the human <title> and unknown robin:* meta (workflow, category)', async () => {
+  it('updates and clears shared optional fields while preserving unrelated metadata and body', async () => {
     const ctx = makeCtx(vault);
-    // A real v0.2 page carries robin:workflow / robin:category that the meta
-    // vocabulary does not enumerate, and a human <title> that is not the slug.
+    await taskCreate({
+      title: 'Document the API',
+      project: 'robin',
+      next_action: 'Write examples',
+      acceptance: 'Examples are tested',
+      body_md: '# API\n\nKeep this body.',
+    }, ctx);
+
+    await taskUpdate({
+      ref: 'brain/tasks/document-the-api.html',
+      project: 'new-project',
+      next_action: '',
+      acceptance: '',
+    }, ctx);
+
+    const parsed = parseRobinHtml(fs.readFileSync(path.join(vault, 'brain', 'tasks', 'document-the-api.html'), 'utf8'));
+    const m = parsed.meta as Record<string, string | string[]>;
+    expect(m['robin:project']).toBe('new-project');
+    expect(m['robin:next_action']).toBeUndefined();
+    expect(m['robin:acceptance']).toBeUndefined();
+    expect(parsed.bodyText).toContain('Keep this body.');
+  });
+
+  it('rejects invalid fields before touching the page and rejects non-task pages', async () => {
+    const ctx = makeCtx(vault);
+    await taskCreate({ title: 'Validate me', project: 'robin' }, ctx);
+    const target = path.join(vault, 'brain', 'tasks', 'validate-me.html');
+    const before = fs.readFileSync(target, 'utf8');
+
+    await expect(taskUpdate({ ref: 'brain/tasks/validate-me.html', status: 'bogus' }, ctx))
+      .rejects.toThrow(/invalid task status/);
+    expect(fs.readFileSync(target, 'utf8')).toBe(before);
+
+    await pageCreate({ folder: 'brain', slug: 'a-note', type: 'note', body_md: '# Note' }, ctx);
+    await expect(taskUpdate({ ref: 'brain/a-note.html', owner: 'Sam' }, ctx))
+      .rejects.toThrow(/task under brain\/tasks/);
+  });
+
+  it('preserves legacy lifecycle under canonical status during an unrelated update', async () => {
+    const ctx = makeCtx(vault);
+    const legacy = `<!doctype html>
+<html><head><title>Legacy</title>
+<meta name="robin:version" content="0.2">
+<meta name="robin:slug" content="legacy">
+<meta name="robin:path" content="brain/tasks/legacy.html">
+<meta name="robin:type" content="task">
+<meta name="robin:state" content="in-progress">
+<meta name="robin:updated" content="2026-07-25T00:00:00Z">
+</head><body><article data-robin-doc><p>Legacy body.</p></article></body></html>`;
+    fs.writeFileSync(path.join(vault, 'brain', 'tasks', 'legacy.html'), legacy);
+
+    await taskUpdate({ ref: 'brain/tasks/legacy.html', owner: 'Sam' }, ctx);
+    const out = fs.readFileSync(path.join(vault, 'brain', 'tasks', 'legacy.html'), 'utf8');
+    expect(parseRobinHtml(out).meta['robin:status']).toBe('in-progress');
+    expect(parseRobinHtml(out).meta['robin:state']).toBeUndefined();
+  });
+
+  it('preserves <title> + canonical (category) + custom (review-by) meta, and drops the retired workflow tag', async () => {
+    const ctx = makeCtx(vault);
+    // robin:category is a canonical field (survives via the meta vocabulary);
+    // robin:review-by is a non-vocabulary custom tag (survives via the extra-meta
+    // splice); robin:workflow is a RETIRED tag (DROPPED_META_NAMES) that must be
+    // stripped on rewrite. Plus a human <title> that is not the slug.
     const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -114,6 +264,7 @@ describe('task.update', () => {
   <meta name="robin:status" content="open">
   <meta name="robin:updated" content="2026-05-01T00:00:00Z">
   <meta name="robin:workflow" content="scheduled">
+  <meta name="robin:review-by" content="2026-06-15">
   <meta name="robin:category" content="beacon">
 </head>
 <body>
@@ -133,7 +284,8 @@ describe('task.update', () => {
     expect(m['robin:status']).toBe('done');
     // ...but the human title and the custom tags survived (the bug clobbered them).
     expect(out).toContain('<title>Image Generation Feature</title>');
-    expect(m['robin:workflow']).toBe('scheduled');
+    expect(m['robin:review-by']).toBe('2026-06-15'); // custom tag preserved via splice
+    expect(m['robin:workflow']).toBeUndefined(); // retired tag dropped on rewrite
     expect(m['robin:category']).toBe('beacon');
     expect(parsed.bodyText).toContain('A distinctive body sentence.');
   });
@@ -238,7 +390,7 @@ describe('link.add — durable body write', () => {
   <meta name="robin:slug" content="prod-deploy">
   <meta name="robin:path" content="brain/prod-deploy.html">
   <meta name="robin:type" content="task">
-  <meta name="robin:workflow" content="scheduled">
+  <meta name="robin:review-by" content="2026-06-15">
   <meta name="robin:category" content="infra">
 </head>
 <body>
@@ -256,7 +408,7 @@ describe('link.add — durable body write', () => {
     const parsed = parseRobinHtml(out);
     const m = parsed.meta as Record<string, string | string[]>;
     expect(out).toContain('<title>Production Deployment Setup</title>');
-    expect(m['robin:workflow']).toBe('scheduled');
+    expect(m['robin:review-by']).toBe('2026-06-15');
     expect(m['robin:category']).toBe('infra');
     // The link itself is durable and the original prose survived.
     expect(parsed.wikilinkTargets).toContain('target');

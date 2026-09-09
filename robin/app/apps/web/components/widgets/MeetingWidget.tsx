@@ -7,7 +7,7 @@ import { LiveRecorder } from "@/components/meeting/LiveRecorder";
 import { TranscriptEditor } from "@/components/meeting/TranscriptEditor";
 import { CalendarMatcher } from "@/components/meeting/CalendarMatcher";
 
-const ACCENT = "var(--robin-amber)";
+const ACCENT = "var(--blue)";
 
 export function MeetingWidget() {
   const { size, setSize, meeting: s } = useWidgets();
@@ -28,7 +28,7 @@ export function MeetingWidget() {
         {!reviewing && (
           <>
             <LiveRecorder onComplete={s.onComplete} onStatusChange={s.onStatusChange} />
-            <div className="border-t border-[var(--border-0)] pt-3">
+            <div className="border-t border-[var(--hairline)] pt-3">
               <CalendarMatcher
                 recordingStartedAt={s.recordingStartedAt}
                 onSuggestion={s.setSuggestion}
@@ -41,12 +41,12 @@ export function MeetingWidget() {
         {reviewing && (
           <div className="flex min-h-0 flex-1 flex-col gap-4">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-widest text-[var(--text-2)]">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">
                 Recording captured · {Math.round(s.result!.durationSec)}s
               </span>
               <button
                 onClick={s.reset}
-                className="rounded-md border border-[var(--border-0)] px-2.5 py-1 text-[11px] text-[var(--text-1)] transition-colors hover:bg-[var(--bg-2)] hover:text-[var(--text-0)]"
+                className="rounded-[var(--radius)] border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)] transition-colors hover:bg-[var(--card-2)] hover:text-[var(--ink)]"
               >
                 ＋ New
               </button>
@@ -57,19 +57,19 @@ export function MeetingWidget() {
             )}
 
             {s.reviewStage !== "editing" && (
-              <div className="rounded-xl border border-[var(--border-0)] bg-[var(--bg-1)] p-4">
-                <p className="text-sm font-medium text-[var(--text-0)]">
-                  <span className="mr-1.5 text-[var(--robin-amber)]">✦</span>Process with AI
+              <div className="rounded-[var(--radius-lg)] bg-[var(--card)] p-4 shadow-[var(--offset-sm)]">
+                <p className="text-sm font-medium text-[var(--ink)]">
+                  <span className="mr-1.5 text-[var(--blue)]">✦</span>Process with AI
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-[var(--text-1)]">
-                  Title, summary, key points, action items, speaker names, and a cleaned
-                  transcript. Editable afterwards.
+                <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                  Title, summary, decisions, commitments, conflicts, speaker names, and a cleaned
+                  transcript. Everything stays editable before Robin carries it forward.
                 </p>
                 <div className="mt-3 flex items-center gap-2">
                   <button
                     onClick={s.runProcess}
                     disabled={s.reviewStage === "processing"}
-                    className="flex items-center gap-2 rounded-md bg-[var(--robin-amber)] px-3.5 py-1.5 text-sm font-medium text-[#1a0e00] transition-opacity hover:opacity-90 disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-[var(--radius)] bg-[var(--blue)] px-3.5 py-1.5 text-sm font-medium text-[var(--on-blue)] shadow-[var(--offset-sm)] transition-opacity hover:opacity-90 disabled:opacity-60"
                   >
                     {s.reviewStage === "processing" && (
                       <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -82,13 +82,13 @@ export function MeetingWidget() {
                   <button
                     onClick={s.skipProcess}
                     disabled={s.reviewStage === "processing"}
-                    className="rounded-md border border-[var(--border-0)] px-3 py-1.5 text-sm text-[var(--text-1)] transition-colors hover:bg-[var(--bg-2)] hover:text-[var(--text-0)] disabled:opacity-50"
+                    className="rounded-[var(--radius)] border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--card-2)] hover:text-[var(--ink)] disabled:opacity-50"
                   >
                     Skip — edit raw
                   </button>
                 </div>
                 {s.processError && (
-                  <p className="mt-3 rounded-md border border-[color-mix(in_srgb,var(--warning-rust)_40%,transparent)] bg-[color-mix(in_srgb,var(--warning-rust)_12%,transparent)] px-3 py-2 text-xs text-[var(--warning-rust)]">
+                  <p className="mt-3 rounded-[var(--radius)] border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-[var(--red-wash)] px-3 py-2 text-xs text-[var(--red)]">
                     {s.processError}
                   </p>
                 )}
@@ -97,16 +97,22 @@ export function MeetingWidget() {
 
             {s.reviewStage === "editing" && (
               <div className="min-h-0 flex-1">
+                {s.processed?.warning && (
+                  <p className="mb-3 rounded-[var(--radius)] border border-[color-mix(in_srgb,var(--warn)_40%,transparent)] bg-[color-mix(in_srgb,var(--warn)_12%,transparent)] px-3 py-2 text-xs text-[var(--warn)]">
+                    {s.processed.warning}
+                  </p>
+                )}
                 {!big && (
                   <button
                     onClick={() => setSize("big")}
-                    className="mb-3 w-full rounded-md border border-[var(--border-0)] bg-[var(--bg-1)] px-3 py-2 text-xs text-[var(--text-1)] transition-colors hover:text-[var(--text-0)]"
+                    className="mb-3 w-full rounded-[var(--radius)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--muted)] shadow-[var(--offset-sm)] transition-colors hover:text-[var(--ink)]"
                   >
                     Editing is roomier in the big view — expand ↗
                   </button>
                 )}
                 <TranscriptEditor
                   transcript={s.processed?.cleanedTranscript ?? s.result!.transcript}
+                  meetingId={s.result!.meetingId}
                   audioPath={s.result!.audioPath ?? undefined}
                   durationSec={s.result!.durationSec}
                   initialSlug={s.suggestion?.slug ?? ""}
@@ -114,7 +120,9 @@ export function MeetingWidget() {
                   initialTitle={s.processed?.title ?? ""}
                   initialSummary={s.processed?.summary ?? ""}
                   initialKeyPoints={s.processed?.keyPoints ?? []}
+                  initialDecisions={s.processed?.decisions ?? []}
                   initialActionItems={s.processed?.actionItems ?? []}
+                  initialConflicts={s.processed?.conflicts ?? []}
                   speakerNames={s.processed?.speakers}
                 />
               </div>

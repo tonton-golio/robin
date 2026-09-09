@@ -47,6 +47,9 @@ export async function GET(): Promise<NextResponse> {
   return NextResponse.json(roots);
 }
 
+/** Poster siblings written by robin/scripts/gen-out-posters.mjs. */
+const POSTER_RE = /(?:-slide-1|\.poster)\.(?:jpe?g|png)$/i;
+
 async function buildTree(
   absDir: string,
   relDir: string,
@@ -61,7 +64,16 @@ async function buildTree(
   const children: TreeNode[] = [];
 
   const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.'));
-  const files = entries.filter((e) => e.isFile() && !e.name.startsWith('.') && e.name !== '.gitkeep');
+  const files = entries.filter(
+    (e) =>
+      e.isFile() &&
+      !e.name.startsWith('.') &&
+      e.name !== '.gitkeep' &&
+      // Generated card faces for /publish. They are derived from the artifact
+      // sitting next to them, are never navigated to directly, and listing them
+      // would add one phantom entry per artifact to the sidebar count.
+      !POSTER_RE.test(e.name),
+  );
 
   dirs.sort((a, b) => a.name.localeCompare(b.name));
   files.sort((a, b) => a.name.localeCompare(b.name));

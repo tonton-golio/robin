@@ -1,7 +1,7 @@
 /**
  * fixture-vault.ts
  *
- * Copies tests/fixtures/vault into a fresh tmpdir for each test run.
+ * Copies tests/fixtures/vault into a fresh tmpdir for ad-hoc tests.
  * Returns the absolute path to the copy so tests can point ROBIN_VAULT at it.
  *
  * Usage (in a beforeEach or test fixture):
@@ -29,6 +29,8 @@ function copyDirSync(src: string, dest: string): void {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
+    // `.robin` is a derived index, never part of a fresh-vault fixture.
+    if (entry.name === '.robin') continue;
     if (entry.isDirectory()) {
       copyDirSync(srcPath, destPath);
     } else {
@@ -41,11 +43,8 @@ function copyDirSync(src: string, dest: string): void {
  * Copy the fixture vault to a unique tmpdir.
  * Returns the absolute path to the copy.
  *
- * Note: Playwright's webServer config is set at config load time, so this
- * function is most useful in tests that spin up a second server instance,
- * or when ROBIN_VAULT_TEST is exported before starting the dev server.
- * For the default Playwright webServer flow, the fixture vault at
- * tests/fixtures/vault is used directly (see playwright.config.ts).
+ * The main Playwright suite uses its worker-scoped server fixture, which owns
+ * the same disposable-vault lifecycle plus process restart controls.
  */
 export async function copyFixtureVault(): Promise<string> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'robin-test-vault-'));

@@ -1,6 +1,12 @@
-# ROBIN_FORMAT v0.2 — Locked file format
+# ROBIN_FORMAT — v0.2 default, v0.3 staged opt-in
 
-This document defines the canonical on-disk format for Robin's browser-readable brain. It is the contract between the converter, indexer, editor, and MCP server. The `robin:*` HTML meta namespace is a legacy implementation detail and should not be used as product language.
+This document defines the canonical on-disk format for Robin's browser-readable
+brain. It is the contract between the converter, indexer, editor, and MCP
+server. v0.2 remains the producer default. v0.3 is accepted only through an
+explicit, reviewed migration and adds immutable identity plus typed provenance;
+it does not change the canonical article/body representation. The `robin:*`
+HTML meta namespace is a legacy implementation detail and should not be used as
+product language.
 
 Robin copies the agentmemory architecture at the memory layer: durable pages are human-readable HTML, while recall memory is a structured engine store with tiers, lifecycle, search, and provenance. Do not model every memory as a page.
 
@@ -13,7 +19,13 @@ Robin copies the agentmemory architecture at the memory layer: durable pages are
 - Operational logs: `<vault>/logs/changelog.md`, `<vault>/logs/ingest-log.md`, and `<vault>/logs/repo-log.md`
 - Structured recall memory: `<vault>/brain/memory/events.jsonl`
 - Audio: `<vault>/inbox/meetings/audio/<ISO-timestamp>.webm`
-- Index sidecar: `<vault>/.robin/` (fully gitignored; contains `index.db`, `aliases.json`, and other rebuildable app state)
+- Edit history: `<vault>/inbox/robin/edits/<YYYY-MM>.jsonl` plus currently
+  tracked prior-byte snapshots under `<vault>/.history/`; referenced snapshots
+  are retained and only unreferenced snapshots are eligible for thinning
+- Runtime sidecar: `<vault>/.robin/` (fully gitignored, but mixed durability:
+  `index.db` is rebuildable, locks are ephemeral coordination, `aliases.json`
+  may be operator-authored, and pending transaction receipts/delete tombstones
+  are critical crash-recovery evidence)
 - Alias overrides: `<vault>/.robin/aliases.json` (gitignored unless user opts in)
 
 **Slug rules:**
@@ -145,28 +157,35 @@ The MCP `log.append` tool wraps an atomic `writeFile(tmp) + rename` to preserve 
 
 | Meta key | Cardinality | Type | Required | Notes |
 |---|---|---|---|---|
-| `robin:version` | 1 | string | yes | Spec version. Currently `0.2`. |
-| `robin:slug` | 1 | string | yes | Kebab-case basename. Need not be globally unique (`path` is the unique key). |
-| `robin:path` | 1 | string | yes | Vault-relative, e.g. `brain/risk-register.html`. |
-| `robin:type` | 1 | enum | yes | `task` \| `person` \| `candidate` \| `project` \| `feature` \| `knowledge` \| `understanding` \| `reference` \| `tool` \| `repo` \| `decision` \| `meeting` \| `interview` \| `brief` \| `report` \| `remsleep` \| `reflection` \| `index` \| `template` \| `skill` \| `playbook` \| `work-log` \| `note` |
+| `robin:version` | 1 | string | yes | `0.2` (producer default) or `0.3` (staged opt-in). |
+| `robin:id` | 0..1 | lowercase UUID | v0.3 only | Required exactly once in v0.3 and prohibited in v0.2. Immutable after migration; this is the stable v0.3 page identity. |
+| `robin:slug` | 1 | string | yes | Kebab-case basename. Need not be globally unique; `path` is the unique vault locator and v0.3 adds stable `robin:id`. |
+| `robin:path` | 1 | string | yes | Vault-relative locator, e.g. `brain/risk-register.html`. It is the operational identity in v0.2; v0.3 uses `robin:id` as stable identity. |
+| `robin:type` | 1 | enum | yes | The executable vocabulary is `annotation`, `artifact`, `brief`, `candidate`, `commitment`, `compile-receipt`, `decision`, `feature`, `hub`, `index`, `intervention`, `interview`, `knowledge`, `meeting`, `note`, `pattern`, `person`, `playbook`, `project`, `presentation`, `reflection`, `reflection-questions`, `remsleep`, `repo`, `report`, `reference`, `skill`, `standard`, `storyboard`, `task`, `template`, `tool`, `understanding`, and `work-log`. |
 | `robin:state` | 0..1 | string | no | Type-specific: `in-progress`, `done`, `stable`, `evolving`, `needs-review`, `archived`, etc. |
 | `robin:updated` | 1 | ISO-8601 UTC | yes | Set automatically on every save. |
 | `robin:created` | 0..1 | ISO-8601 UTC | no | Set once on create. |
 | `robin:summary` | 0..1 | string | recommended | One-line summary. Surfaced in search results. |
 | `robin:owner` | 0..1 | string | no | Person responsible. |
-| `robin:priority` | 0..1 | enum | no | `p1` \| `p2` \| `p3` \| `p4`. Tasks only. |
+| `robin:priority` | 0..1 | enum | no | `p0` \| `p1` \| `p2` \| `p3`. Higher number means lower priority. Tasks only. |
 | `robin:due` | 0..1 | ISO-8601 date | no | Tasks only. |
 | `robin:role` | 0..1 | string | no | People only. |
-| `robin:relationship` | 0..1 | enum | no | `direct-report` \| `stakeholder` \| `external` \| `candidate`. People only. |
+| `robin:relationship` | 0..1 | string | no | Lowercase kebab classification such as `direct-report`, `stakeholder`, `strategic-partner`, or `hiring-partner`. People only. |
 | `robin:started` | 0..1 | ISO-8601 date | no | People only. |
 | `robin:date` | 0..1 | ISO-8601 date | no | Meetings, briefs, reports. |
 | `robin:attendee` | 0..* | string | no | Meetings. Repeated. |
 | `robin:duration` | 0..1 | string | no | Meetings. E.g. `"45 min"`. |
-| `robin:source` | 0..* | string | no | Vault-relative paths to inbox source files. Repeated. |
+| `robin:source` | 0..* | string | v0.2 only | Legacy provenance. Prohibited in v0.3. |
+| `robin:source-kind` | 0..* | enum | v0.3 only | Optional typed provenance. Each occurrence is paired by order with one `robin:source-ref`; allowed kinds are `annotation`, `audio`, `conversation`, `document`, `email`, `import`, `manual`, `meeting`, `other`, `slack`, `upload`, and `web`. |
+| `robin:source-ref` | 0..* | string | v0.3 only | Non-empty, unique provenance reference paired by order with `robin:source-kind`. Both arrays must have equal cardinality. |
 | `robin:tag` | 0..* | string | no | Repeated, lexically sorted at canonicalization. |
 | `robin:tier` | 0..1 | enum | no | Override automatic tier assignment. `working` \| `episodic` \| `semantic` \| `procedural`. |
 
-Unknown frontmatter keys are dropped at canonicalization — author them as body content instead. The index parses meta tags exclusively, so adding a new indexed field requires a spec bump.
+Unknown frontmatter keys are dropped at canonicalization — author them as body
+content instead. The index parses meta tags exclusively, so adding a new
+indexed field requires a spec bump. A v0.3 write is rejected if it removes or
+changes `robin:id`, downgrades the version, restores legacy `robin:source`, or
+breaks the ordered provenance pairs.
 
 ## YAML → meta mapping
 
@@ -188,7 +207,7 @@ The mapping is encoded in `packages/converter/src/meta.ts` as a `FieldMapping[]`
 
 The web app is read-only today; pages are authored via the agent / files / MCP. An
 in-app rich-text editor remains possible but is intentionally **not** wired in. Blocks
-are **not** stored on disk in v0.2 — body HTML is the only persisted content.
+are **not** stored on disk in v0.2 or v0.3 — body HTML is the only persisted content.
 
 - The converter still uses the frozen, vendored blocks-to-HTML emitter (`packages/converter/src/blocks-to-html.ts`) as an in-memory intermediate when transforming markdown input to canonical HTML. The block tree never reaches the file.
 - If an editor is wired in later: an html→blocks parse runs at editor open time, blocks→html serialization runs at save time. Block `id` fields stay session-local and are regenerated each load. The file format does not change.
@@ -210,13 +229,51 @@ There is no longer a blocks-JSON round-trip step: blocks are not persisted, so t
 
 ## Versioning
 
-This spec is `v0.2` (matching the `robin:version` content emitted on every page). Bumping requires:
-- Updating `<meta name="robin:version">` default in the converter.
-- A migration script in `packages/converter/migrations/v0.x-to-vN.ts` that upgrades existing files in-place.
-- A CHANGELOG entry in this file.
+The converter emits v0.2 by default. v0.3 is a staged opt-in for an explicitly
+reviewed page set; no normal writer or startup path bulk-migrates a vault.
+
+Build the converter, run it from the vault root, inspect `--dry-run`, back up the
+selected files independently, apply the migration, then use `--check` to prove
+the selected files have converged:
+
+```sh
+npm --prefix robin/app run build --workspace=@robin/converter
+npm --prefix robin/app run build --workspace=@robin/vault-io
+node robin/app/packages/converter/dist/cli.js migrate --to v0.3 base/brain/example.html --vault base --dry-run
+node robin/scripts/migrate-page.mjs --vault base --to v0.3 base/brain/example.html --dry-run
+node robin/scripts/migrate-page.mjs --vault base --to v0.3 base/brain/example.html --write
+node robin/scripts/migrate-page.mjs --vault base --to v0.3 base/brain/example.html --check
+```
+
+Normal durable writes enforce the post-migration boundary: they refuse a v0.3
+downgrade or `robin:id` replacement. A future producer-default bump still
+requires updating converter defaults, an explicit migration path, contract and
+golden tests, this changelog, and restore/recovery validation.
+
+Migration accepts only an unambiguous Robin document: exactly one
+`<article data-robin-doc>`, exactly one non-empty title in the real document
+head, and exactly one non-empty slug/type/updated value. Generic output HTML is rejected. Directory and glob
+runs are strict and should be used only to inventory candidates; writes should
+use an explicit reviewed file set. The CLI reads the executable page roots from
+`robin/schemas/v1/contract.json` and refuses v0.3 migration outside those roots;
+capture/inbox migration requires a future contract change rather than a bypass.
+Directory/glob migration is planning-only. The single-page writer validates the
+transformed contract before taking the vault lock and uses compare-and-swap,
+history, an audit event, and a crash-recovery receipt for the write.
+It also refuses a stale built runtime and treats any canonical article-byte
+change as a failed migration invariant.
+When v0.3 needs a new random identity, dry-run JSON reports
+`preview_reproducible=false`; the preview hash proves that candidate bytes
+validated but is not a promise to reuse the ephemeral UUID during apply.
+The same plan reports proposed identity/provenance metadata and matching
+before/after article hashes.
 
 ### CHANGELOG
 
+- **v0.3 — staged opt-in, 2026-07-25.** Added one immutable lowercase UUID
+  `robin:id`. Replaced legacy repeated `robin:source` with optional, ordered
+  `robin:source-kind`/`robin:source-ref` pairs of equal cardinality. The article
+  body remains canonical HTML. v0.2 remains the producer default.
 - **v0.2 — 2026-05-28.** Dropped `<script id="robin:blocks">` and `<script id="robin:frontmatter">` from the on-disk format. Body HTML inside `<article data-robin-doc>` is the sole canonical content store; `<meta name="robin:*">` tags remain the canonical metadata. The frozen blocks-to-HTML emitter still exists in `packages/converter` as an in-memory intermediate during markdown→HTML conversion, but blocks are never persisted. Unknown frontmatter keys are dropped (previously round-tripped via `#robin:frontmatter`). Round-trip golden tests assert HTML idempotence rather than blocks-JSON byte equality. Migration script: `packages/converter/migrations/v0.1-to-v0.2.ts`.
 - **v0.1.** Initial locked format. Embedded `<script id="robin:frontmatter">` (lossless YAML mirror) and `<script id="robin:blocks">` (BlockNote source of truth) in `<head>`; body HTML regenerated from blocks on every save.
 

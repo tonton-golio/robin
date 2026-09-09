@@ -217,7 +217,18 @@ export async function search(
   const graphPaths: string[] = [];
   for (const slug of graphSlugs) {
     const row = db
-      .prepare('SELECT path FROM pages WHERE slug = ?')
+      .prepare(`SELECT path FROM pages
+                 WHERE slug = ?
+                 ORDER BY CASE
+                   WHEN lower(path) LIKE 'archive/%'
+                     OR lower(path) LIKE '%/archive/%'
+                     OR lower(path) LIKE 'archives/%'
+                     OR lower(path) LIKE '%/archives/%'
+                     OR lower(path) LIKE 'archived/%'
+                     OR lower(path) LIKE '%/archived/%'
+                   THEN 1 ELSE 0 END,
+                   path
+                 LIMIT 1`)
       .get(slug) as { path: string } | undefined;
     if (row) graphPaths.push(row.path);
   }

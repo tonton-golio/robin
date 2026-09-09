@@ -35,7 +35,7 @@ robin/app/tests/fixtures/vault/.robin/
 base/inbox/contracts/
 
 # Local working clones (durable summaries live in base/brain/repos/)
-base/repos/
+repos/
 
 # Local-only assets served to decks (keep out of the shareable framework)
 robin/app/apps/web/public/deck-assets/

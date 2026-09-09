@@ -55,7 +55,9 @@ function readPositiveIntEnv(env: NodeJS.ProcessEnv, key: string, fallback: numbe
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function getInterviewRuntimeConfig(env: NodeJS.ProcessEnv = process.env): InterviewRuntimeConfig {
+export function getInterviewRuntimeConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): InterviewRuntimeConfig {
   const mode = readNonEmptyEnv(env, "ROBIN_XAI_MODE") === "stub" ? "stub" : INTERVIEW_DEFAULTS.mode;
 
   return {
@@ -163,10 +165,14 @@ function buildSessionUpdate(systemPrompt: string, config: InterviewRuntimeConfig
         prefix_padding_ms: 300,
       },
       audio: {
-        input: { format: { type: "audio/pcm", rate: config.sampleRate } },
+        input: {
+          format: { type: "audio/pcm", rate: config.sampleRate },
+          // xAI's current Realtime schema emits completed user transcripts
+          // when transcription is configured under audio.input.
+          transcription: { model: "grok-transcribe" },
+        },
         output: { format: { type: "audio/pcm", rate: config.sampleRate } },
       },
-      input_audio_transcription: { model: "whisper-1" },
       tools: [SEARCH_TOOL],
     },
   };
@@ -195,7 +201,7 @@ async function getIndexer(vaultRoot: string) {
   }
   try {
     // Dynamic import to avoid hard dependency crash at startup
-    const mod = await import("@robin/indexer" as string) as {
+    const mod = (await import("@robin/indexer" as string)) as {
       createIndexer: (opts: { vaultPath: string }) => Promise<{
         search: (q: string, opts?: { k?: number }) => Promise<SearchHit[]>;
       }>;
@@ -285,7 +291,11 @@ export async function handleRelayConnection(
   // reconnect we keep writing to the same file rather than splitting it.
   const session: VoiceSessionState = isResume
     ? prior!
-    : { transcriptStore: new InterviewTranscriptStore(safeBriefSlug), turns: [], disconnectedAt: null };
+    : {
+        transcriptStore: new InterviewTranscriptStore(safeBriefSlug),
+        turns: [],
+        disconnectedAt: null,
+      };
   session.disconnectedAt = null;
   sessions.set(safeBriefSlug, session);
   const transcriptStore = session.transcriptStore;
@@ -306,13 +316,18 @@ export async function handleRelayConnection(
   const closeTranscript = (): void => {
     if (transcriptClosed) return;
     transcriptClosed = true;
-    void transcriptStore.close().then(() => {
-      if (transcriptStore.turnCount > 0) {
-        console.log(
-          `[xai-relay] transcript saved (${transcriptStore.turnCount} turns) → ${transcriptStore.path}`,
-        );
-      }
-    });
+    void transcriptStore
+      .close()
+      .then(() => {
+        if (transcriptStore.turnCount > 0) {
+          console.log(
+            `[xai-relay] transcript saved (${transcriptStore.turnCount} turns) → ${transcriptStore.path}`,
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("[xai-relay] transcript persistence failed:", error);
+      });
   };
 
   // Helper: send to browser safely

@@ -7,18 +7,21 @@
  * path-aware. folder is vault-relative, e.g. 'brain/tasks'.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { z } from 'zod/v4';
-import { writePage, assemblePage, mdToBlocks, slugify as libSlugify } from '../html-utils.js';
-import { mcpError } from '../resolve.js';
-import type { ToolContext, PageCreateOutput } from '../types.js';
-import type { RobinBlock } from '@robin/converter';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { z } from "zod/v4";
+import { writePage, assemblePage, mdToBlocks, slugify as libSlugify } from "../html-utils.js";
+import { mcpError } from "../resolve.js";
+import type { ToolContext, PageCreateOutput } from "../types.js";
+import type { RobinBlock } from "@robin/converter";
 
 export const PageCreateInputSchema = z.object({
-  folder: z.string().describe('Vault-relative folder, e.g. brain/tasks'),
-  slug: z.string().min(1).describe('Kebab-case basename slug (unique within its folder; the path is the global key)'),
-  type: z.string().describe('robin:type value'),
+  folder: z.string().describe("Vault-relative folder, e.g. brain/tasks"),
+  slug: z
+    .string()
+    .min(1)
+    .describe("Kebab-case basename slug (unique within its folder; the path is the global key)"),
+  type: z.string().describe("robin:type value"),
   frontmatter: z.record(z.string(), z.unknown()).optional(),
   body_md: z.string().optional(),
 });
@@ -27,16 +30,16 @@ export type PageCreateInput = z.infer<typeof PageCreateInputSchema>;
 
 export async function pageCreate(
   input: PageCreateInput,
-  ctx: ToolContext
+  ctx: ToolContext,
 ): Promise<PageCreateOutput> {
   const slug = libSlugify(input.slug) || input.slug;
-  const vaultRelativePath = `${input.folder}/${slug}.html`.replace(/\/+/g, '/');
+  const vaultRelativePath = `${input.folder}/${slug}.html`.replace(/\/+/g, "/");
 
   // Containment guard: `input.folder` is otherwise unvalidated, so a folder like
   // '../.claude' or an absolute path would let creation write outside the vault.
   // Reject null bytes and any path that resolves outside the vault root, mirroring
   // the guard in resolve.ts (page.read/write/move/delete).
-  if (input.folder.includes('\0') || slug.includes('\0')) {
+  if (input.folder.includes("\0") || slug.includes("\0")) {
     throw mcpError(-32602, `Invalid path: ${vaultRelativePath}`, undefined);
   }
   const absolutePath = path.join(ctx.vaultPath, vaultRelativePath);
@@ -56,23 +59,23 @@ export async function pageCreate(
   // in .claude/. The path.resolve containment check above doesn't catch this
   // because .claude is still inside the vault root. Mirrors page-move.ts
   // safeDestination, which normalizes and rejects '../' before the root check.
-  const ALLOWED_ROOTS = new Set(['brain', 'inbox', 'out', 'logs']);
+  const ALLOWED_ROOTS = new Set(["brain", "inbox", "out", "logs"]);
   const normalized = path.posix
-    .normalize(vaultRelativePath.replaceAll(path.sep, '/'))
-    .replace(/^\.\//, '');
-  if (path.posix.isAbsolute(normalized) || normalized === '..' || normalized.startsWith('../')) {
+    .normalize(vaultRelativePath.replaceAll(path.sep, "/"))
+    .replace(/^\.\//, "");
+  if (path.posix.isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) {
     throw mcpError(
       -32602,
       `Folder must be under brain/, inbox/, out/, or logs/: ${vaultRelativePath}`,
-      undefined
+      undefined,
     );
   }
-  const folderRoot = normalized.split('/')[0];
+  const folderRoot = normalized.split("/")[0];
   if (!folderRoot || !ALLOWED_ROOTS.has(folderRoot)) {
     throw mcpError(
       -32602,
       `Folder must be under brain/, inbox/, out/, or logs/: ${vaultRelativePath}`,
-      undefined
+      undefined,
     );
   }
 
@@ -107,7 +110,9 @@ export async function pageCreate(
     updated: now,
   });
 
-  await writePage(absolutePath, html);
+  // The existence pre-check is only diagnostic. The create-only CAS closes the
+  // race where another writer creates this exact path before our atomic write.
+  await writePage(absolutePath, html, { expectedHash: null });
 
   return { path: vaultRelativePath, slug };
 }

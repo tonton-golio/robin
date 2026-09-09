@@ -1,28 +1,17 @@
----
-type: task
-summary: "Add a `batch` tag on the shared-shelf photos so the most-recently-donated item's photo shows first when the shelf list syncs. A quick fix until the records can hold a real donation date."
-status: open
-priority: p2
-due: 2026-06-30
-owner: Casey Morgan
-project: tool-library
-category: shelf-photos
-source: meeting
-created: 2026-05-05
-updated: 2026-05-05
-tags: [task, beacon, photos, data-structure, proposal]
----
+# Prepare the example table
 
-# Add batch tag to shared-shelf photos
+Synthetic task fixture.
 
-**Goal**: The tool library's [[markers/photo-boards|Photo Boards]] writes shelf photos with a `batch` tag. On sync, the newest-batch photo moves to the front. No records change — a quick bridge, not a full donation-date overhaul.
+- [x] Find a folding table
+- [ ] Print plant labels
+  - [ ] Check the type size
+  - [x] Choose plain paper
+- [ ] Place the spare trays
 
-**Why**: Volunteers keep pushing the newest donations' photos up by hand because the shelf order is by category, not by date. The `batch` tag is a quick bridge, not a records overhaul.
+## Completion check
 
-**Next action**: Casey Morgan folds the tag into the next photo-board pass. Coordinate with the shelf-list owner for the ordering at sync time.
+A visitor can read the label without moving a tray.
 
-**Notes**:
-- Main value: the shelf shows what's actually on it now.
-- Limitation accepted: a borrower browsing only the older shelves won't see a newer photo.
+**Due:** 2030-04-12 · **Owner:** Garden coordinator
 
-> Source: [[meetings/shelf-labels-and-category-mismatch]]
+~~Use permanent ink on the trays.~~ Use removable labels instead.

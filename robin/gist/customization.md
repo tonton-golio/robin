@@ -10,6 +10,8 @@ A starter kit, by design, is generic. Most of what makes the system useful is th
 | **Agent's name** | `CLAUDE.md`, `.claude/constitution/identity.md`, signature line in `communications.md` | Identity. Pick anything — Robin, Iris, Atlas. |
 | **Your name / owner identity** | App: `ROBIN_OWNER` + `NEXT_PUBLIC_ROBIN_OWNER` env (`.env.local`). Claude Code side: `CLAUDE.md`, `.claude/constitution/identity.md` + `{{USER_NAME}}`. | App greetings/persona/attribution read `ROBIN_OWNER` via `lib/config.ts` (generic when unset). The constitution covers terminal sessions. |
 | **Org / org glossary** | `ROBIN_ORG` + `ROBIN_ORG_GLOSSARY` env (`.env.local`) | Org name woven into the persona; the comma-separated glossary boosts meeting-transcription keyterms. Both env-driven (no code edit); empty by default. |
+| **GitHub links** | `NEXT_PUBLIC_ROBIN_GITHUB_ORG` in `.env.local` | Resolves short repository references in Memory. Empty leaves them as plain text. Rebuild after changing browser settings. |
+| **Output recipients** | `ROBIN_EXTERNAL_RECIPIENTS` + `ROBIN_LEADERSHIP_RECIPIENTS` in `.env.local` | Optional comma-separated names for inferred output groups. Generic role labels work without these settings. |
 | **Time zone** | `config.yaml` (`timezone:` line), used by daily-rhythm skills | Calendar display, scheduling, due-date math. |
 | **Email** | `.claude/skills/check-email/SKILL.md` (`email:` config), signature | Inbox triage and outgoing messages. |
 | **Strategic lenses** | `identity.md` (last section) | Tensions you're actively navigating. Keep 2–3 max. |
@@ -144,7 +146,7 @@ base/inbox/contracts/        # employment/bonus/comp documents
 robin/app/apps/web/public/deck-assets/
 
 # Nested working repos and tool caches (local workspace state)
-base/repos/
+repos/
 robin/tools/**/node_modules/
 robin/tools/**/.venv/
 robin/tools/**/__pycache__/

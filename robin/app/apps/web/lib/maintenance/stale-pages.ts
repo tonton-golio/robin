@@ -1,7 +1,5 @@
-import fs from 'fs/promises';
 import path from 'path';
 import { pageHref } from '@/lib/catalog';
-import { locateVault } from '@/lib/vault';
 import type { MaintenanceItem } from './types';
 import { numberValue, stringValue, type SqliteDb } from './shared';
 
@@ -37,30 +35,23 @@ interface StaleRow {
   last_accessed: string | null;
 }
 
-export async function getStalePagesSection(limit: number): Promise<StalePagesSection> {
-  const vault = locateVault();
-  const dbPath = path.join(vault, '.robin', 'index.db');
+// The db handle is opened once by the snapshot orchestrator (read-only) and
+// passed in; null means the index db is missing or could not be opened.
+export async function getStalePagesSection(limit: number, db: SqliteDb | null): Promise<StalePagesSection> {
   const source = path.join('.robin', 'index.db');
 
-  try {
-    await fs.access(dbPath);
-  } catch {
+  if (!db) {
     return {
       title: 'Stale pages',
       source,
       available: false,
-      reason: 'index_db_missing',
+      reason: 'index_db_unavailable',
       total: 0,
       items: [],
     };
   }
 
-  let db: SqliteDb | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const indexer = require('@robin/indexer') as { openDb: (dbPath: string) => SqliteDb };
-    db = indexer.openDb(dbPath);
-
     const cols = db.prepare('PRAGMA table_info(pages)').all() as { name?: unknown }[];
     const colNames = new Set(cols.map((col) => stringValue(col.name)).filter((name): name is string => Boolean(name)));
     if (!colNames.has('staleness')) {
@@ -117,12 +108,6 @@ export async function getStalePagesSection(limit: number): Promise<StalePagesSec
       total: 0,
       items: [],
     };
-  } finally {
-    try {
-      db?.close();
-    } catch {
-      // Nothing useful to report here; the snapshot has already been built.
-    }
   }
 }
 

@@ -1,0 +1,39 @@
+{
+  "$schema": "./workspace-manifest.schema.json",
+  "schema_version": 1,
+  "repos_root": "repos",
+  "policy": "docs/governance/storage-policy.md",
+  "vault": {
+    "path": "base",
+    "backup": "external-backup",
+    "backup_owner": "team-data-owner",
+    "backup_system": "encrypted-independent-object-store",
+    "restore_tested_at": "2026-07-01T09:00:00Z",
+    "data_class": "mixed",
+    "notes": "Canonical vault with independently verified recovery."
+  },
+  "entries": [
+    {
+      "id": "example-active-clone",
+      "path": "repos/example-active-clone",
+      "role": "clone",
+      "lifecycle": "active",
+      "vcs": "git",
+      "backup": "required",
+      "backup_owner": "team-data-owner",
+      "backup_due": "2026-08-31",
+      "data_class": "company-private",
+      "notes": "An origin remote replicates committed Git objects but is not an independent backup; establish and restore-test one."
+    },
+    {
+      "id": "example-local-prototype",
+      "path": "repos/example-local-prototype",
+      "role": "local-project",
+      "lifecycle": "scratch",
+      "vcs": "none",
+      "backup": "none-intentional",
+      "data_class": "personal-private",
+      "notes": "Disposable by explicit choice; promote or archive before it becomes durable."
+    }
+  ]
+}

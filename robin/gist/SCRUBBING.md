@@ -41,14 +41,21 @@ Run this **before any share**.
 ## 6. Reset owner/org identity to placeholders
 
 - [ ] App identity is env-driven and ships clean: keep `ROBIN_OWNER` / `ROBIN_ORG` / `ROBIN_ORG_GLOSSARY` / `NEXT_PUBLIC_ROBIN_OWNER` in your gitignored `.env.local`, never in tracked files. The Claude Code side — `CLAUDE.md` and `.claude/constitution/identity.md` — does carry identity in-file, so set those to `{{USER_NAME}}` / `{{AGENT_NAME}}` placeholders before sharing the *framework*.
-- [ ] Set runtime identity via env where the system supports it (`ROBIN_VAULT`, `ASSISTANT_CLAUDE_CWD`) — never hardcode absolute personal paths into shared files. The shipped `Makefile` and `doctor.sh` contain the author's absolute `base/` path; parameterize or note them before sharing.
+- [ ] Set runtime identity via env where the system supports it (`ROBIN_VAULT`, `ASSISTANT_CLAUDE_CWD`) — never hardcode absolute personal paths into shared files. The shipped `Makefile` defaults to `./base`; keep overrides in local configuration.
 
 ## 7. Rename the personal `about_*` directory
 
 - [ ] The brain has a directory for personal context about the primary user. This kit ships it as **`about_user/`** as the generic convention. In a live setup you may have renamed it to `about_<you>`.
 - [ ] **The directory basename itself is a personalization point** — it encodes a name. Before sharing, rename it back to the generic `about_user/` (or strip it from the share), and update any references in `brain/_index.html`, hubs, and wikilinks.
 
-## 8. Final sweep
+## 8. Review examples and media
+
+- [ ] Test fixtures must be invented from scratch. Changing names in a real meeting, personnel narrative, or project report does not make it safe to share.
+- [ ] Inspect screenshots and design mockups visually. Keep drafts rendered with a real vault in the private archive.
+- [ ] Keep GitHub organization and recipient aliases in `.env.local`: `NEXT_PUBLIC_ROBIN_GITHUB_ORG`, `ROBIN_EXTERNAL_RECIPIENTS`, and `ROBIN_LEADERSHIP_RECIPIENTS`. They default to empty. `NEXT_PUBLIC_` values are visible in the built browser bundle; build public demos with synthetic configuration.
+- [ ] Derive team lanes from vault task owners; do not add a real team roster to UI code.
+
+## 9. Final sweep
 
 - [ ] `rg -n "/Users/<your-username>/" robin/ .claude/ CLAUDE.md Makefile` — replace personal absolute paths with placeholders or relative references where shared.
 - [ ] Run `make doctor` — it flags stale path prefixes and unignored secrets/env files.

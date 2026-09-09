@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/robin-test';
 
 /**
  * log.spec.ts
@@ -34,8 +34,10 @@ test.describe('log files', () => {
 
   test('changelog is not an HTML page in the file tree', async ({ page }) => {
     // changelog.md should NOT appear as a /p/out route (only via _logs/)
-    const response = await page.goto('/p/out/_changelog');
-    // Should return 404 since it's not an indexed HTML page
-    expect(response?.status()).toBe(404);
+    await page.goto('/p/out/_changelog');
+    // A streamed Next response can start with HTTP 200 before notFound() runs.
+    // Assert the rendered missing-page state, not the initial stream status.
+    await expect(page.getByRole('heading', { name: '404', exact: true })).toBeVisible();
+    await expect(page.getByText('Page not found in the vault.')).toBeVisible();
   });
 });

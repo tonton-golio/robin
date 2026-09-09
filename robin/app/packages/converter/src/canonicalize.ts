@@ -38,6 +38,15 @@ export interface CanonicalizeOptions {
   bodyHtml?: string;
   /** Override the `updated` timestamp. Defaults to "now" (ISO-8601 UTC, no ms). */
   updatedAt?: Date;
+  /**
+   * Extra `robin:*` <meta> tags the writer cannot express via RobinMeta
+   * (robin:review-by, and any other custom tag). Emitted into <head> after the
+   * canonical meta block so a frontmatter-only rewrite preserves custom metadata
+   * instead of silently dropping it. Pairs of [name, content]; collect them with
+   * {@link collectExtraMetaTags}. This is the single splice implementation shared
+   * by the web write path and the MCP server.
+   */
+  extraMeta?: Array<[string, string]>;
 }
 
 /**
@@ -54,6 +63,7 @@ export function canonicalizeHtml({
   blocks,
   bodyHtml: bodyHtmlOverride,
   updatedAt,
+  extraMeta,
 }: CanonicalizeOptions): string {
   // Always set updated to now on save (or use the provided override)
   const updatedMeta: RobinMeta = {
@@ -63,8 +73,13 @@ export function canonicalizeHtml({
       : new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
   };
 
+  // Canonical meta block (sorted by metaTagsForHead) followed by any extra
+  // robin:* tags the writer can't express via RobinMeta — guarded so a name
+  // already emitted canonically is never duplicated.
   const metaEntries = metaTagsForHead(updatedMeta);
-  const metaTagsHtml = metaEntries
+  const emittedNames = new Set(metaEntries.map(([name]) => name));
+  const extraEntries = (extraMeta ?? []).filter(([name]) => !emittedNames.has(name));
+  const metaTagsHtml = [...metaEntries, ...extraEntries]
     .map(([name, content]) => `  <meta name="${escapeAttr(name)}" content="${escapeAttr(content)}">`)
     .join('\n');
 

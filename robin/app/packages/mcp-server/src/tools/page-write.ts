@@ -7,39 +7,65 @@
  * To clear a field, pass null.
  */
 
-import { z } from 'zod/v4';
-import { resolveRef } from '../resolve.js';
-import { readPage, extractMeta, writePage, mergeFrontmatter, assemblePage, mdToBlocks } from '../html-utils.js';
-import type { ToolContext, PageWriteOutput } from '../types.js';
+import { z } from "zod/v4";
+import { frontmatterFromMeta } from "@robin/converter";
+import { hashHtml } from "@robin/vault-io";
+import { mcpError, resolveRef } from "../resolve.js";
+import {
+  readPageWithRaw,
+  extractMeta,
+  extractTitle,
+  extractUnknownMetaTags,
+  writePage,
+  mergeFrontmatter,
+  assemblePage,
+  mdToBlocks,
+} from "../html-utils.js";
+import type { ToolContext, PageWriteOutput } from "../types.js";
 
 export const PageWriteInputSchema = z.object({
-  ref: z.string().min(1).describe('Slug or vault-relative path'),
+  ref: z.string().min(1).describe("Slug or vault-relative path"),
   frontmatter: z
     .record(z.string(), z.unknown())
     .optional()
-    .describe('Partial frontmatter update; pass null value to clear a field'),
-  body_md: z.string().optional().describe('Markdown body to convert and store'),
+    .describe("Partial frontmatter update; pass null value to clear a field"),
+  body_md: z.string().optional().describe("Markdown body to convert and store"),
+  expected_hash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/i)
+    .optional()
+    .describe("SHA-256 from page.read; reject the write if the page changed"),
 });
 
 export type PageWriteInput = z.infer<typeof PageWriteInputSchema>;
 
-export async function pageWrite(
-  input: PageWriteInput,
-  ctx: ToolContext
-): Promise<PageWriteOutput> {
+export async function pageWrite(input: PageWriteInput, ctx: ToolContext): Promise<PageWriteOutput> {
   const resolved = await resolveRef(input.ref, ctx);
-  const parsed = await readPage(resolved.absolutePath);
+  const { parsed, html: originalHtml } = await readPageWithRaw(resolved.absolutePath);
   const existingMeta = extractMeta(parsed, resolved.vaultRelativePath);
+  const title = extractTitle(originalHtml);
+  const extraMeta = extractUnknownMetaTags(parsed);
 
   // Merge frontmatter (v0.2: frontmatter no longer round-trips through a JSON
   // script tag, so we synthesize a minimal raw from the meta we just parsed
   // out of <head> when no inline frontmatter survives).
   const existingRaw =
-    (parsed.frontmatter as Record<string, unknown> | null) ??
-    rawFromMeta(existingMeta);
-  const updatedRaw = input.frontmatter
+    (parsed.frontmatter as Record<string, unknown> | null) ?? frontmatterFromMeta(existingMeta);
+  if (
+    input.frontmatter?.["id"] !== undefined &&
+    input.frontmatter["id"] !== existingMeta.id
+  ) {
+    throw mcpError(-32602, "immutable robin:id cannot be changed through page.write", undefined);
+  }
+  const mergedRaw = input.frontmatter
     ? mergeFrontmatter(existingRaw, input.frontmatter)
     : existingRaw;
+  const updatedRaw: Record<string, unknown> = {
+    ...mergedRaw,
+    version: existingMeta.version,
+    ...(existingMeta.id ? { id: existingMeta.id } : {}),
+  };
+  if (!existingMeta.id) delete updatedRaw["id"];
 
   // Determine body source:
   //   - If body_md given → convert to blocks (canonical re-render).
@@ -56,15 +82,23 @@ export async function pageWrite(
       frontmatter: { ...updatedRaw, updated: now.toISOString() },
       blocks,
       updated: now,
+      title,
+      extraMeta,
     });
-  } else if (parsed.blocks && Array.isArray(parsed.blocks) && (parsed.blocks as unknown[]).length > 0) {
+  } else if (
+    parsed.blocks &&
+    Array.isArray(parsed.blocks) &&
+    (parsed.blocks as unknown[]).length > 0
+  ) {
     // Legacy v0.1 path: blocks JSON still embedded.
     html = assemblePage({
       slug: existingMeta.slug,
       vaultRelativePath: resolved.vaultRelativePath,
       frontmatter: { ...updatedRaw, updated: now.toISOString() },
-      blocks: parsed.blocks as import('@robin/converter').RobinBlock[],
+      blocks: parsed.blocks as import("@robin/converter").RobinBlock[],
       updated: now,
+      title,
+      extraMeta,
     });
   } else {
     // v0.2 path with no new body — keep the existing <article> body verbatim.
@@ -74,40 +108,20 @@ export async function pageWrite(
       frontmatter: { ...updatedRaw, updated: now.toISOString() },
       bodyHtml: parsed.bodyHtml,
       updated: now,
+      title,
+      extraMeta,
     });
   }
 
-  await writePage(resolved.absolutePath, html);
+  await writePage(resolved.absolutePath, html, {
+    // Even when the caller did not supply a precondition, protect this
+    // read-modify-write window from a concurrent writer.
+    expectedHash: input.expected_hash ?? hashHtml(originalHtml),
+  });
 
   return {
     path: resolved.vaultRelativePath,
     slug: resolved.slug,
     updated: now.toISOString(),
   };
-}
-
-/**
- * Synthesize a minimal frontmatter dict from RobinMeta. Used when reading a
- * v0.2 page that no longer carries an embedded JSON frontmatter payload — the
- * <head> meta tags become the authoritative source.
- */
-function rawFromMeta(meta: import('@robin/converter').RobinMeta): Record<string, unknown> {
-  const raw: Record<string, unknown> = { type: meta.type };
-  if (meta.summary) raw.summary = meta.summary;
-  if (meta.state) raw.state = meta.state;
-  if (meta.owner) raw.owner = meta.owner;
-  if (meta.priority) raw.priority = meta.priority;
-  if (meta.size !== undefined) raw.size = meta.size;
-  if (meta.due) raw.due = meta.due;
-  if (meta.role) raw.role = meta.role;
-  if (meta.relationship) raw.relationship = meta.relationship;
-  if (meta.started) raw.started = meta.started;
-  if (meta.date) raw.date = meta.date;
-  if (meta.duration) raw.duration = meta.duration;
-  if (meta.tier) raw.tier = meta.tier;
-  if (meta.created) raw.created = meta.created;
-  if (meta.tags.length) raw.tags = [...meta.tags];
-  if (meta.attendees.length) raw.attendees = [...meta.attendees];
-  if (meta.sources.length) raw.sources = [...meta.sources];
-  return raw;
 }

@@ -7,7 +7,14 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+        // Quiet Slate card - the utility-form twin of `.r-card`. Elevation is
+        // the separation device, so there is no border: level 0 is `--paper`
+        // (the app ground), level 1 is `--card` + `--offset-sm` (this default),
+        // level 2 is `--card` + `--offset` (a page's primary panel - pass
+        // `shadow-[var(--offset)]` at the call site), level 3 is `--card-2` +
+        // `--offset-lg` (popovers, dialogs, toasts). A surface takes a shadow
+        // OR a border, never both.
+        "flex flex-col gap-6 rounded-[var(--radius)] bg-card py-6 text-card-foreground shadow-[var(--offset-sm)]",
         className
       )}
       {...props}
